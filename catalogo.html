@@ -15,7 +15,7 @@
     <script src="./monetag-loader.js"></script>
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body data-page="inicio">
+  <body data-page="catalogo">
     <header class="topbar">
       <div class="brand">
         <a class="brand-link" href="./index.html" aria-label="Ir a inicio">
@@ -82,7 +82,7 @@
           </button>
           <div class="subnav-dropdown-menu" data-subcategory-menu="Electrodomesticos"></div>
         </div>
-        <a class="subnav-link plain-link" href="#ofertas">Ofertas</a>
+        <a class="subnav-link plain-link" href="./index.html#ofertas">Ofertas</a>
         <a class="subnav-link plain-link" href="./catalogo.html">Catálogo</a>
       </div>
     </nav>
@@ -91,55 +91,6 @@
       <nav class="breadcrumbs" aria-label="Migas de navegación">
         <ol id="breadcrumbsList" class="breadcrumbs-list"></ol>
       </nav>
-
-      <section class="hero">
-        <div class="hero-carousel" id="heroCarousel" aria-label="Carrusel de categorías destacadas">
-          <div class="hero-track" id="heroTrack"></div>
-          <button class="hero-control prev" id="heroPrev" type="button" aria-label="Imagen anterior">
-            &#10094;
-          </button>
-          <button class="hero-control next" id="heroNext" type="button" aria-label="Siguiente imagen">
-            &#10095;
-          </button>
-          <div id="heroDots" class="hero-dots"></div>
-        </div>
-        <div class="hero-overlay"></div>
-        <div class="hero-text">
-          <p class="kicker">ElectroShop</p>
-          <h1>Tu tienda de tecnología y hogar en Ocotal.</h1>
-          <p>
-            Encuentra artículos de marcas originales, electrodomésticos, muebles, celulares, consolas de
-            videojuegos y mucho más.
-          </p>
-          <a class="hero-btn" href="./catalogo.html">Ver catálogo</a>
-        </div>
-      </section>
-
-      <section class="offers" id="ofertas">
-        <article>
-          <h3>Envío gratis</h3>
-          <p>
-            Envío gratis en Ocotal y alrededores 🚚<br />
-            Enviamos a otras ciudades y municipios aledaños — tarifa según destino (te cotizamos por WhatsApp)
-          </p>
-        </article>
-        <article>
-          <h3>Pagos</h3>
-          <p>Efectivo, transferencias y pago contra entrega.</p>
-        </article>
-        <article>
-          <h3>Garantía</h3>
-          <p>Productos con respaldo y soporte posventa.</p>
-        </article>
-      </section>
-
-      <section class="home-sections-wrap" id="homeSectionsWrap">
-        <div class="home-sections-head">
-          <h2>Explora por categorías</h2>
-          <p>Selecciona una sección para ver productos por tipo, marca o línea.</p>
-        </div>
-        <div id="homeSections" class="home-sections"></div>
-      </section>
 
       <section class="catalog-wrapper" id="catalogo">
         <section class="products-section">

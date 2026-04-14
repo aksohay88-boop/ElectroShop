@@ -10,6 +10,8 @@
     inlineInjected: false,
     serviceWorkerAttempted: false,
     serviceWorkerRegistered: false,
+    serviceWorkerUnregisterAttempted: false,
+    serviceWorkerUnregisteredCount: 0,
     warnings: []
   };
 
@@ -160,6 +162,63 @@
       });
   }
 
+  function getWorkerScriptUrl(registration) {
+    return (
+      registration?.active?.scriptURL || registration?.waiting?.scriptURL || registration?.installing?.scriptURL || ""
+    );
+  }
+
+  function resolvePathname(urlLike) {
+    try {
+      return new URL(String(urlLike), window.location.origin).pathname;
+    } catch (error) {
+      return String(urlLike || "");
+    }
+  }
+
+  function unregisterServiceWorkersByPath(serviceWorkerPath) {
+    status.serviceWorkerUnregisterAttempted = true;
+
+    if (!serviceWorkerPath || typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+      return;
+    }
+
+    const expectedPathname = resolvePathname(serviceWorkerPath);
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => {
+        const targets = registrations.filter((registration) => {
+          const workerPathname = resolvePathname(getWorkerScriptUrl(registration));
+          return workerPathname === expectedPathname;
+        });
+
+        if (targets.length === 0) {
+          return Promise.resolve([]);
+        }
+
+        return Promise.all(
+          targets.map((registration) =>
+            registration.unregister().then((didUnregister) => (didUnregister ? 1 : 0))
+          )
+        );
+      })
+      .then((results) => {
+        if (!Array.isArray(results)) {
+          return;
+        }
+
+        const total = results.reduce((sum, value) => sum + value, 0);
+        status.serviceWorkerUnregisteredCount = total;
+        if (total > 0) {
+          logDebug(`Service Worker desregistrado (${total}) para ruta: ${expectedPathname}`);
+        }
+      })
+      .catch((error) => {
+        warn("No se pudo desregistrar el Service Worker existente.");
+        console.error("No se pudo desregistrar el service worker:", error);
+      });
+  }
+
   appendVerificationMeta(config.verificationMetaName, config.verificationMetaContent);
 
   if (!config.enabled) {
@@ -186,6 +245,8 @@
 
   if (config.registerServiceWorker) {
     registerServiceWorker(config.serviceWorkerPath || "/sw.js");
+  } else if (config.unregisterServiceWorkerWhenDisabled !== false) {
+    unregisterServiceWorkersByPath(config.serviceWorkerPath || "/sw.js");
   }
 
   const rawTagWasInjected = appendRawHeadTagHtml(config.rawHeadTagHtml);

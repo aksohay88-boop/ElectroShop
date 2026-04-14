@@ -188,12 +188,18 @@ const state = {
   subcategory: "all",
   search: ""
 };
+const PAGE_TYPE = document.body?.dataset.page || "inicio";
+const IS_CATALOG_PAGE = PAGE_TYPE === "catalogo";
+const CATALOG_PAGE_PATH = "./catalogo.html";
+const HOME_PAGE_PATH = "./index.html";
+const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 
 const WHATSAPP_NUMBER = "50582108899";
 const WHATSAPP_BASE_URL = `https://wa.me/${WHATSAPP_NUMBER}`;
 const MAX_CREDIT_MONTHS = 12;
 const DOWN_PAYMENT_PERCENT = 0.1;
 const MIN_DOWN_PAYMENT = 1000;
+const MIN_VISIBLE_PRICE = 1000;
 const CELLPHONE_MONTHLY_INTEREST = 0.055;
 const HOME_APPLIANCE_MONTHLY_INTEREST = 0.05;
 const HOME_PREVIEW_LIMIT = 8;
@@ -383,6 +389,58 @@ const LOCAL_CSV_CONFIG = {
   celularesPath: "./data/celulares.csv",
   electrodomesticosPath: "./data/electrodomesticos.csv"
 };
+const EXHIBITION_CSV_CONFIG = {
+  // Mapa manual de imagenes por SKU/modelo/nombre.
+  // Formato sugerido: CATEGORIA,SKU,MODELO,NOMBRE,IMAGEN,EXHIBIDO
+  // EXHIBIDO: 1/si/true para mostrar, 0/no/false para ocultar.
+  path: "./data/imagenes_exhibidos.csv",
+  onlyExhibited: true
+};
+const FEATURED_RULES = [
+  {
+    badge: "JBL",
+    test: (_, text) => text.includes("jbl")
+  },
+  {
+    badge: "Samsung Alta Gama",
+    test: (_, text) =>
+      text.includes("samsung") && (/(galaxy\s*s\d{1,2}\b|ultra|z\s*fold|z\s*flip)/.test(text) || text.includes("alta gama"))
+  },
+  {
+    badge: "iPhone Alta Gama",
+    test: (_, text) => text.includes("iphone") && (/(pro\b|pro max|max\b|iphone\s*1[4-9]\b)/.test(text) || text.includes("alta gama"))
+  },
+  {
+    badge: "Laptops",
+    test: (item, text) => normalizeText(item.subcategory) === "laptops" || text.includes("laptop")
+  },
+  {
+    badge: "Refrigeradoras",
+    test: (item, text) => normalizeText(item.subcategory) === "refrigeradoras" || text.includes("refrigeradora")
+  },
+  {
+    badge: "Cocinas",
+    test: (item, text) => normalizeText(item.subcategory) === "cocina" || text.includes("cocina") || text.includes("estufa")
+  },
+  {
+    badge: "Lavadoras",
+    test: (item, text) => normalizeText(item.subcategory) === "lavadoras" || text.includes("lavadora")
+  },
+  {
+    badge: "Videojuegos",
+    test: (item, text) =>
+      ["playstation", "nintendo", "xbox", "gaming"].includes(normalizeText(item.subcategory)) ||
+      text.includes("playstation") ||
+      text.includes("nintendo") ||
+      text.includes("xbox") ||
+      text.includes("videojuego") ||
+      text.includes("gaming")
+  },
+  {
+    badge: "Camas Indufoam",
+    test: (_, text) => text.includes("indufoam") && (text.includes("cama") || text.includes("colchon"))
+  }
+];
 
 function normalizeText(value) {
   return String(value ?? "")
@@ -396,6 +454,101 @@ function normalizeText(value) {
 function toFiniteNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getProductTextForRules(item) {
+  const specsText = Array.isArray(item.specs) ? item.specs.join(" ") : "";
+  return normalizeText(`${item.name} ${item.category} ${item.subcategory} ${item.description} ${specsText}`);
+}
+
+function getFeaturedPriority(item) {
+  const text = getProductTextForRules(item);
+  const index = FEATURED_RULES.findIndex((rule) => rule.test(item, text));
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+function getFeaturedBadge(item) {
+  const priority = getFeaturedPriority(item);
+  return priority < FEATURED_RULES.length ? FEATURED_RULES[priority].badge : "";
+}
+
+function sortProductsByFeaturedPriority(items) {
+  const priorityCache = new Map();
+  const getPriority = (item) => {
+    if (priorityCache.has(item.id)) {
+      return priorityCache.get(item.id);
+    }
+
+    const priority = getFeaturedPriority(item);
+    priorityCache.set(item.id, priority);
+    return priority;
+  };
+
+  return [...items].sort((left, right) => {
+    const leftPriority = getPriority(left);
+    const rightPriority = getPriority(right);
+
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    return left.id - right.id;
+  });
+}
+
+function resolveCategoryFromUrl(rawCategory) {
+  const normalizedCategory = normalizeText(rawCategory);
+
+  if (normalizedCategory === "celulares") {
+    return "Celulares";
+  }
+
+  if (normalizedCategory === "electrodomesticos") {
+    return "Electrodomesticos";
+  }
+
+  return "all";
+}
+
+function buildCatalogUrl(category = "all", subcategory = "all", search = "") {
+  const params = new URLSearchParams();
+  if (category && category !== "all") {
+    params.set("categoria", category);
+  }
+  if (category && category !== "all" && subcategory && subcategory !== "all") {
+    params.set("subcategoria", subcategory);
+  }
+
+  const cleanSearch = String(search ?? "").trim();
+  if (cleanSearch) {
+    params.set("buscar", cleanSearch);
+  }
+
+  const query = params.toString();
+  return `${CATALOG_PAGE_PATH}${query ? `?${query}` : ""}`;
+}
+
+function openCatalogPage(category = "all", subcategory = "all", search = "") {
+  window.location.href = buildCatalogUrl(category, subcategory, search);
+}
+
+function openHomePage() {
+  window.location.href = HOME_PAGE_PATH;
+}
+
+function applyInitialCatalogStateFromUrl() {
+  if (!IS_CATALOG_PAGE) {
+    return;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const category = resolveCategoryFromUrl(params.get("categoria"));
+  const rawSubcategory = params.get("subcategoria");
+  const rawSearch = params.get("buscar");
+
+  state.category = category;
+  state.subcategory = resolveExistingSubcategory(category, rawSubcategory || "all");
+  state.search = String(rawSearch || "").trim();
 }
 
 function parseNumber(value) {
@@ -879,6 +1032,176 @@ function buildImages(row, seed) {
   ];
 }
 
+function buildImageTripletFromUrls(rawUrls) {
+  const uniqueUrls = [...new Set(rawUrls.map((url) => normalizeImageUrl(url)).filter((url) => url.length > 0))];
+  const preferred = uniqueUrls.filter((url) => looksLikeImageUrl(url));
+  const images = (preferred.length > 0 ? preferred : uniqueUrls).slice(0, 3);
+
+  if (images.length === 0) {
+    return [];
+  }
+
+  while (images.length < 3) {
+    images.push(images[images.length - 1]);
+  }
+
+  return images;
+}
+
+function parseDisplayFlag(value, fallback = true) {
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    return fallback;
+  }
+
+  if (["1", "si", "s", "true", "yes", "y", "x", "mostrar", "exhibido", "visible"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "no", "n", "false", "ocultar", "oculto", "hide", "hidden", "agotado"].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+}
+
+function normalizeExhibitionEntryCategory(value) {
+  const resolved = resolveCategoryFromUrl(value);
+  return resolved === "all" ? "" : resolved;
+}
+
+function parseExhibitionEntry(row) {
+  const { sku, model, identifier } = getProductIdentifiers(row);
+  const name = String(
+    findFieldValue(row, ["name", "nombre", "producto", "articulo", "item", "titulo", "title"]) || ""
+  ).trim();
+  const category = normalizeExhibitionEntryCategory(findFieldValue(row, ["categoria", "category"]));
+  const imageField = findFieldValue(row, ["imagen", "image", "foto", "img", "url", "enlace", "link"]);
+  const images = buildImageTripletFromUrls(extractImageUrlsFromValue(imageField));
+  const exhibido = parseDisplayFlag(
+    findFieldValue(row, ["exhibido", "mostrar", "visible", "display", "estado", "status", "disponible"]),
+    true
+  );
+
+  if (!sku && !model && !identifier && !name) {
+    return null;
+  }
+
+  return {
+    category,
+    sku: normalizeText(sku),
+    model: normalizeText(model),
+    identifier: normalizeText(identifier),
+    name: normalizeText(name),
+    images,
+    exhibido
+  };
+}
+
+async function collectExhibitionEntriesFromLocalCsv() {
+  const csvPath = String(EXHIBITION_CSV_CONFIG.path || "").trim();
+  if (!csvPath) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(csvPath, { cache: "no-store" });
+    if (!response.ok) {
+      return [];
+    }
+
+    const csvText = decodeCsvBuffer(await response.arrayBuffer());
+    const rows = csvToObjects(csvText);
+    return rows
+      .map((row) => parseExhibitionEntry(row))
+      .filter((entry) => entry !== null);
+  } catch (error) {
+    console.error("Error leyendo CSV de imagenes exhibidas:", error);
+    return [];
+  }
+}
+
+function scoreExhibitionMatch(product, entry) {
+  if (entry.category && entry.category !== product.category) {
+    return 0;
+  }
+
+  const productSku = normalizeText(product.sku || "");
+  const productModel = normalizeText(product.model || "");
+  const productIdentifier = normalizeText(product.identifier || "");
+  const productName = normalizeText(product.name || "");
+  let score = 0;
+
+  if (entry.sku && productSku && entry.sku === productSku) {
+    score += 100;
+  }
+  if (entry.model && productModel && entry.model === productModel) {
+    score += 90;
+  }
+  if (entry.identifier && productIdentifier && entry.identifier === productIdentifier) {
+    score += 85;
+  }
+  if (entry.name && productName) {
+    if (entry.name === productName) {
+      score += 70;
+    } else if (productName.includes(entry.name) || entry.name.includes(productName)) {
+      score += 35;
+    }
+  }
+
+  return score;
+}
+
+function findBestExhibitionEntry(product, entries) {
+  let bestEntry = null;
+  let bestScore = 0;
+
+  for (const entry of entries) {
+    const score = scoreExhibitionMatch(product, entry);
+    if (score > bestScore) {
+      bestScore = score;
+      bestEntry = entry;
+    }
+  }
+
+  return bestScore > 0 ? bestEntry : null;
+}
+
+function applyExhibitionEntries(productsList, entries) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return productsList;
+  }
+
+  const onlyExhibited = Boolean(EXHIBITION_CSV_CONFIG.onlyExhibited);
+  const nextProducts = [];
+
+  productsList.forEach((product) => {
+    const matchedEntry = findBestExhibitionEntry(product, entries);
+
+    if (onlyExhibited) {
+      if (!matchedEntry || !matchedEntry.exhibido) {
+        return;
+      }
+    } else if (matchedEntry && matchedEntry.exhibido === false) {
+      return;
+    }
+
+    if (matchedEntry && matchedEntry.images.length > 0) {
+      nextProducts.push({ ...product, images: matchedEntry.images });
+      return;
+    }
+
+    nextProducts.push(product);
+  });
+
+  if (onlyExhibited && nextProducts.length === 0) {
+    console.warn("No hubo coincidencias en imagenes_exhibidos.csv; se mantiene el catalogo original.");
+    return productsList;
+  }
+
+  return nextProducts;
+}
+
 function mapSheetRowsToProducts(rows, category) {
   const mapped = [];
 
@@ -889,7 +1212,7 @@ function mapSheetRowsToProducts(rows, category) {
     const parsedPrice = parseNumber(priceValue);
     const safePrice = toFiniteNumber(parsedPrice, 0);
 
-    if (safePrice <= 0) {
+    if (safePrice < MIN_VISIBLE_PRICE) {
       return;
     }
 
@@ -965,6 +1288,9 @@ function mapSheetRowsToProducts(rows, category) {
     mapped.push({
       id: mapped.length + 1,
       name,
+      sku,
+      model,
+      identifier,
       price: safePrice,
       category,
       subcategory,
@@ -1059,6 +1385,7 @@ async function collectProductsFromLocalCsv() {
 async function loadProductsFromDataSources() {
   const categories = ["Celulares", "Electrodomesticos"];
   const localProducts = await collectProductsFromLocalCsv();
+  const exhibitionEntries = await collectExhibitionEntriesFromLocalCsv();
   const missingCategories = categories.filter((category) => !localProducts.has(category));
   const googleProducts =
     missingCategories.length > 0 ? await collectProductsFromGoogleSheets(missingCategories) : new Map();
@@ -1079,19 +1406,21 @@ async function loadProductsFromDataSources() {
     mergedProducts.push(...DEFAULT_PRODUCTS.filter((item) => item.category === category));
   });
 
-  products = mergedProducts.map((item, index) => ({ ...item, id: index + 1 }));
+  const priceFilteredProducts = mergedProducts.filter((item) => toFiniteNumber(item.price, 0) >= MIN_VISIBLE_PRICE);
+  const exhibitionFilteredProducts = applyExhibitionEntries(priceFilteredProducts, exhibitionEntries);
+  products = exhibitionFilteredProducts.map((item, index) => ({ ...item, id: index + 1 }));
 }
 
 const productGrid = document.getElementById("productGrid");
 const productsTitle = document.getElementById("productsTitle");
 const resultCounter = document.getElementById("resultCounter");
-const subcategoryFilters = document.getElementById("subcategoryFilters");
 const searchInput = document.getElementById("searchInput");
 const searchActionButton = document.getElementById("searchActionButton");
 const refreshCatalogButton = document.getElementById("refreshCatalogButton");
 const whatsappButton = document.getElementById("whatsappButton");
-const categoryButtons = document.querySelectorAll('[data-filter-type="category"]');
 const topCategoryButtons = document.querySelectorAll(".subnav [data-category]");
+const subnavDropdowns = document.querySelectorAll(".subnav-dropdown");
+const subcategoryMenus = document.querySelectorAll("[data-subcategory-menu]");
 const homeSectionsWrap = document.getElementById("homeSectionsWrap");
 const homeSections = document.getElementById("homeSections");
 const breadcrumbsList = document.getElementById("breadcrumbsList");
@@ -1116,11 +1445,17 @@ const modalCreditForm = document.getElementById("modalCreditForm");
 const modalCreditMonths = document.getElementById("modalCreditMonths");
 const modalCreditResult = document.getElementById("modalCreditResult");
 const modalCreditWhatsapp = document.getElementById("modalCreditWhatsapp");
+const requirementsWidget = document.getElementById("creditRequirementsWidget");
+const requirementsToggle = document.getElementById("requirementsToggle");
 
 let currentModalProduct = null;
 let heroSlides = [];
 let currentHeroSlideIndex = 0;
 let heroAutoplayId = null;
+let requirementsAutoOpenId = null;
+let requirementsAutoCloseId = null;
+let requirementsHoverCloseId = null;
+
 function formatPrice(value) {
   const safeValue = toFiniteNumber(value, 0);
   return new Intl.NumberFormat("es-NI", {
@@ -1348,11 +1683,32 @@ function getSubcategories(category) {
   return [...new Set(filtered.map((item) => item.subcategory))].sort((a, b) => a.localeCompare(b));
 }
 
+function getMenuSubcategories(category) {
+  if (category === "all") {
+    return [];
+  }
+
+  const available = [...new Set(products.filter((item) => item.category === category).map((item) => item.subcategory))];
+  const preferred = getSubcategories(category);
+  const orderedAvailable = preferred.filter((subcategory) =>
+    available.some((availableSubcategory) => isSameSubcategory(availableSubcategory, subcategory))
+  );
+  const extras = available
+    .filter((subcategory) => !orderedAvailable.some((item) => isSameSubcategory(item, subcategory)))
+    .sort((a, b) => a.localeCompare(b));
+
+  return [...orderedAvailable, ...extras];
+}
+
 function isSameSubcategory(left, right) {
   return normalizeText(left) === normalizeText(right);
 }
 
 function isHomeViewActive() {
+  if (PAGE_TYPE !== "inicio") {
+    return false;
+  }
+
   return state.category === "all" && state.subcategory === "all" && state.search.trim().length === 0;
 }
 
@@ -1436,22 +1792,76 @@ function renderHomeSections() {
 }
 
 function renderSubcategoryFilters() {
-  const options = getSubcategories(state.category);
-  const chips = ['<button class="chip active" data-filter-type="subcategory" data-filter-value="all">Todo</button>'];
+  if (!subcategoryMenus || subcategoryMenus.length === 0) {
+    return;
+  }
 
-  options.forEach((subcategory) => {
-    chips.push(
-      `<button class="chip" data-filter-type="subcategory" data-filter-value="${subcategory}">${subcategory}</button>`
-    );
+  subcategoryMenus.forEach((menu) => {
+    const category = menu.dataset.subcategoryMenu || "";
+    if (!category) {
+      menu.innerHTML = "";
+      return;
+    }
+
+    const options = getMenuSubcategories(category);
+    const categoryLabel = formatCategoryLabel(category);
+    const allButton = `
+      <button
+        class="subnav-subitem subnav-subitem-all"
+        type="button"
+        data-subcategory-option="true"
+        data-category-value="${escapeAttribute(category)}"
+        data-subcategory-value="all"
+      >
+        <span class="subnav-subitem-media subnav-subitem-media-all" aria-hidden="true">#</span>
+        <span class="subnav-subitem-text">
+          <span class="subnav-subitem-title">Ver todo en ${escapeHtml(categoryLabel)}</span>
+          <span class="subnav-subitem-meta">Mostrar todas las subcategorías</span>
+        </span>
+      </button>
+    `;
+
+    const optionButtons = options
+      .map(
+        (subcategory) => {
+          const subcategoryProducts = findProductsByCategoryAndSubcategory(category, subcategory);
+          const featuredProduct = subcategoryProducts[0];
+          const featuredImage = featuredProduct ? getSafePrimaryImage(featuredProduct) : "";
+          const mediaMarkup = featuredImage
+            ? `<span class="subnav-subitem-media"><img src="${escapeAttribute(featuredImage)}" alt="${escapeAttribute(
+                subcategory
+              )}" loading="lazy" /></span>`
+            : `<span class="subnav-subitem-media" aria-hidden="true">${escapeHtml(
+                subcategory.slice(0, 1).toUpperCase()
+              )}</span>`;
+
+          return `
+        <button
+          class="subnav-subitem"
+          type="button"
+          data-subcategory-option="true"
+          data-category-value="${escapeAttribute(category)}"
+          data-subcategory-value="${escapeAttribute(subcategory)}"
+        >
+          ${mediaMarkup}
+          <span class="subnav-subitem-text">
+            <span class="subnav-subitem-title">${escapeHtml(subcategory)}</span>
+            <span class="subnav-subitem-meta">${subcategoryProducts.length} artículo(s)</span>
+          </span>
+        </button>
+      `;
+        }
+      )
+      .join("");
+
+    menu.innerHTML = `${allButton}${optionButtons}`;
   });
-
-  subcategoryFilters.innerHTML = chips.join("");
 }
 
 function getVisibleProducts() {
   const query = state.search.trim().toLowerCase();
 
-  return products.filter((item) => {
+  const filtered = products.filter((item) => {
     const matchCategory = state.category === "all" || item.category === state.category;
     const matchSubcategory = state.subcategory === "all" || item.subcategory === state.subcategory;
     const searchable = `${item.name} ${item.category} ${item.subcategory}`.toLowerCase();
@@ -1459,6 +1869,12 @@ function getVisibleProducts() {
 
     return matchCategory && matchSubcategory && matchSearch;
   });
+
+  if (state.category === "all" && state.subcategory === "all" && query.length === 0) {
+    return sortProductsByFeaturedPriority(filtered);
+  }
+
+  return filtered;
 }
 
 function renderProducts() {
@@ -1467,7 +1883,12 @@ function renderProducts() {
   const toRender = homeViewActive ? visible.slice(0, HOME_PREVIEW_LIMIT) : visible;
 
   if (productsTitle) {
-    productsTitle.textContent = homeViewActive ? "Productos destacados" : "Resultados del catálogo";
+    const showingFeaturedOrder = state.category === "all" && state.subcategory === "all" && state.search.trim().length === 0;
+    if (showingFeaturedOrder) {
+      productsTitle.textContent = "Productos destacados";
+    } else {
+      productsTitle.textContent = homeViewActive ? "Productos destacados" : "Resultados del catálogo";
+    }
   }
 
   if (homeViewActive && visible.length > toRender.length) {
@@ -1491,6 +1912,10 @@ function renderProducts() {
       const categoryLabel = escapeHtml(formatCategoryLabel(item.category));
       const subcategoryLabel = escapeHtml(item.subcategory);
       const productName = escapeHtml(item.name);
+      const featuredBadge = getFeaturedBadge(item);
+      const featuredBadgeMarkup = featuredBadge
+        ? `<span class="featured-badge">${escapeHtml(featuredBadge)}</span>`
+        : "";
       const imageMarkup = primaryImage
         ? `<img src="${escapeAttribute(primaryImage)}" alt="${productName}" loading="lazy" />`
         : escapeHtml(item.icon);
@@ -1499,11 +1924,21 @@ function renderProducts() {
       <article class="card product-card" data-product-id="${item.id}">
         <div class="card-image">${imageMarkup}</div>
         <div class="card-body">
+          ${featuredBadgeMarkup}
           <span class="meta">${categoryLabel} | ${subcategoryLabel}</span>
             <h3 class="title">${productName}</h3>
             <span class="price">${formatPrice(item.price)}</span>
             <div class="card-actions">
-              <button class="buy-btn" data-product-id="${item.id}" type="button">Pedir por WhatsApp</button>
+              <button class="buy-btn" data-product-id="${item.id}" type="button">
+                <span class="btn-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="img">
+                    <path
+                      d="M12 2.2c-5.37 0-9.73 4.36-9.73 9.73 0 1.72.45 3.4 1.31 4.88L2 22l5.34-1.52a9.69 9.69 0 0 0 4.66 1.19h.01c5.37 0 9.73-4.37 9.73-9.74A9.73 9.73 0 0 0 12 2.2zm0 17.81h-.01a8.05 8.05 0 0 1-4.1-1.12l-.29-.17-3.17.9.85-3.08-.19-.31a8.07 8.07 0 0 1-1.23-4.3c0-4.46 3.63-8.09 8.09-8.09s8.1 3.63 8.1 8.09-3.63 8.1-8.09 8.1z"
+                    ></path>
+                  </svg>
+                </span>
+                <span>Pedir por WhatsApp</span>
+              </button>
             </div>
           </div>
         </article>
@@ -1579,19 +2014,33 @@ function renderBreadcrumbs() {
 }
 
 function syncCategoryUi() {
-  categoryButtons.forEach((button) => {
-    button.classList.toggle("active", button.dataset.filterValue === state.category);
-  });
-
   topCategoryButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.category === state.category);
   });
 }
 
 function syncSubcategoryUi() {
-  document.querySelectorAll('[data-filter-type="subcategory"]').forEach((chip) => {
-    chip.classList.toggle("active", chip.dataset.filterValue === state.subcategory);
+  document.querySelectorAll("[data-subcategory-option]").forEach((button) => {
+    const buttonCategory = button.dataset.categoryValue || "";
+    const buttonSubcategory = button.dataset.subcategoryValue || "all";
+    const isActiveCategory = buttonCategory === state.category;
+    const isActiveSubcategory =
+      buttonSubcategory === "all" ? state.subcategory === "all" : isSameSubcategory(buttonSubcategory, state.subcategory);
+    button.classList.toggle("active", isActiveCategory && isActiveSubcategory);
   });
+}
+
+function syncCatalogUrlWithState() {
+  if (!IS_CATALOG_PAGE) {
+    return;
+  }
+
+  const targetUrl = buildCatalogUrl(state.category, state.subcategory, state.search);
+  if (`${window.location.pathname}${window.location.search}`.endsWith(targetUrl.replace("./", "/"))) {
+    return;
+  }
+
+  window.history.replaceState({}, "", targetUrl);
 }
 
 function updateView() {
@@ -1604,6 +2053,7 @@ function updateView() {
   renderBreadcrumbs();
   syncCategoryUi();
   syncSubcategoryUi();
+  syncCatalogUrlWithState();
 }
 
 async function refreshCatalog() {
@@ -1713,6 +2163,130 @@ function closeModal() {
   renderBreadcrumbs();
 }
 
+function isDesktopHoverNavigation() {
+  const supportsHoverPointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  return supportsHoverPointer && window.innerWidth > 760;
+}
+
+function setRequirementsWidgetOpen(isOpen) {
+  if (!requirementsWidget || !requirementsToggle) {
+    return;
+  }
+
+  requirementsWidget.classList.toggle("open", isOpen);
+  requirementsToggle.setAttribute("aria-expanded", String(isOpen));
+}
+
+function clearRequirementsCloseTimers() {
+  if (requirementsAutoCloseId) {
+    clearTimeout(requirementsAutoCloseId);
+    requirementsAutoCloseId = null;
+  }
+
+  if (requirementsHoverCloseId) {
+    clearTimeout(requirementsHoverCloseId);
+    requirementsHoverCloseId = null;
+  }
+}
+
+function openRequirementsWidget(options = {}) {
+  const { autoClose = false, closeAfterMs = 5200 } = options;
+  if (!requirementsWidget || !requirementsToggle) {
+    return;
+  }
+
+  clearRequirementsCloseTimers();
+  setRequirementsWidgetOpen(true);
+
+  if (autoClose) {
+    requirementsAutoCloseId = window.setTimeout(() => {
+      setRequirementsWidgetOpen(false);
+    }, closeAfterMs);
+  }
+}
+
+function closeRequirementsWidget() {
+  clearRequirementsCloseTimers();
+  setRequirementsWidgetOpen(false);
+}
+
+function initializeRequirementsWidget() {
+  if (!requirementsWidget || !requirementsToggle) {
+    return;
+  }
+
+  const supportsHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const canUseSessionStorage = (() => {
+    try {
+      window.sessionStorage.setItem("__requirements_test__", "1");
+      window.sessionStorage.removeItem("__requirements_test__");
+      return true;
+    } catch (error) {
+      return false;
+    }
+  })();
+
+  const wasAutoShown =
+    canUseSessionStorage && window.sessionStorage.getItem(REQUIREMENTS_HOME_SESSION_KEY) === "true";
+  const shouldAutoOpenOnHome = PAGE_TYPE === "inicio" && !wasAutoShown;
+
+  if (shouldAutoOpenOnHome) {
+    requirementsAutoOpenId = window.setTimeout(() => {
+      openRequirementsWidget({ autoClose: true, closeAfterMs: 5400 });
+      if (canUseSessionStorage) {
+        window.sessionStorage.setItem(REQUIREMENTS_HOME_SESSION_KEY, "true");
+      }
+    }, 1400);
+  }
+
+  requirementsToggle.addEventListener("mouseenter", () => {
+    openRequirementsWidget();
+  });
+
+  requirementsToggle.addEventListener("focus", () => {
+    openRequirementsWidget();
+  });
+
+  requirementsWidget.addEventListener("mouseenter", () => {
+    clearRequirementsCloseTimers();
+    openRequirementsWidget();
+  });
+
+  requirementsWidget.addEventListener("focusin", () => {
+    clearRequirementsCloseTimers();
+    openRequirementsWidget();
+  });
+
+  requirementsWidget.addEventListener("mouseleave", () => {
+    requirementsHoverCloseId = window.setTimeout(() => {
+      closeRequirementsWidget();
+    }, 180);
+  });
+
+  if (!supportsHover) {
+    requirementsToggle.addEventListener("click", () => {
+      const isCurrentlyOpen = requirementsWidget.classList.contains("open");
+      if (isCurrentlyOpen) {
+        closeRequirementsWidget();
+        return;
+      }
+
+      openRequirementsWidget({ autoClose: true, closeAfterMs: 5000 });
+    });
+  }
+}
+
+function closeAllSubnavDropdowns(exceptDropdown = null) {
+  subnavDropdowns.forEach((dropdown) => {
+    const shouldStayOpen = exceptDropdown ? dropdown === exceptDropdown : false;
+    dropdown.classList.toggle("open", shouldStayOpen);
+    const toggle = dropdown.querySelector(".subnav-dropdown-toggle");
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", String(shouldStayOpen));
+    }
+  });
+}
+
 function closeMobileMenu() {
   if (!subnavMenu || !menuToggle) {
     return;
@@ -1720,6 +2294,7 @@ function closeMobileMenu() {
 
   subnavMenu.classList.remove("open");
   menuToggle.setAttribute("aria-expanded", "false");
+  closeAllSubnavDropdowns();
 }
 
 if (menuToggle && subnavMenu) {
@@ -1729,6 +2304,24 @@ if (menuToggle && subnavMenu) {
     subnavMenu.classList.toggle("open", shouldOpen);
   });
 }
+
+subnavDropdowns.forEach((dropdown) => {
+  dropdown.addEventListener("mouseenter", () => {
+    if (!isDesktopHoverNavigation()) {
+      return;
+    }
+
+    closeAllSubnavDropdowns(dropdown);
+  });
+
+  dropdown.addEventListener("mouseleave", () => {
+    if (!isDesktopHoverNavigation()) {
+      return;
+    }
+
+    closeAllSubnavDropdowns();
+  });
+});
 
 if (heroPrev) {
   heroPrev.addEventListener("click", () => {
@@ -1767,51 +2360,65 @@ if (heroTrack) {
     if (!slide) {
       return;
     }
-
-    state.category = slide.dataset.slideCategory || "all";
-    state.subcategory = resolveExistingSubcategory(state.category, slide.dataset.slideSubcategory || "all");
-    state.search = "";
-    if (searchInput) {
-      searchInput.value = "";
-    }
-
-    renderSubcategoryFilters();
-    updateView();
-    closeMobileMenu();
-
-    const catalogSection = document.getElementById("catalogo");
-    if (catalogSection) {
-      catalogSection.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    const category = resolveCategoryFromUrl(slide.dataset.slideCategory || "all");
+    const subcategory = resolveExistingSubcategory(category, slide.dataset.slideSubcategory || "all");
+    openCatalogPage(category, subcategory);
   });
 }
 
-categoryButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    state.category = button.dataset.filterValue;
-    state.subcategory = "all";
-    renderSubcategoryFilters();
-    updateView();
-  });
-});
-
 topCategoryButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    state.category = button.dataset.category;
-    state.subcategory = "all";
-    renderSubcategoryFilters();
-    updateView();
-    closeMobileMenu();
+  button.addEventListener("click", (event) => {
+    const selectedCategory = button.dataset.category || "all";
+
+    if (button.classList.contains("subnav-dropdown-toggle")) {
+      if (isDesktopHoverNavigation()) {
+        const category = resolveCategoryFromUrl(selectedCategory);
+        openCatalogPage(category, "all");
+        return;
+      }
+
+      event.preventDefault();
+      const dropdown = button.closest(".subnav-dropdown");
+      if (!dropdown) {
+        return;
+      }
+
+      const shouldOpen = !dropdown.classList.contains("open");
+      closeAllSubnavDropdowns(shouldOpen ? dropdown : null);
+      return;
+    }
+
+    const category = resolveCategoryFromUrl(selectedCategory);
+    if (category === "all") {
+      openHomePage();
+      return;
+    }
+    openCatalogPage(category, "all");
   });
 });
 
 if (subnavMenu) {
   subnavMenu.addEventListener("click", (event) => {
-    if (event.target.closest(".subnav-link")) {
+    const subcategoryButton = event.target.closest("[data-subcategory-option]");
+    if (subcategoryButton) {
+      const category = resolveCategoryFromUrl(subcategoryButton.dataset.categoryValue || "all");
+      const subcategory = resolveExistingSubcategory(category, subcategoryButton.dataset.subcategoryValue || "all");
+      openCatalogPage(category, subcategory);
+      return;
+    }
+
+    if (event.target.closest(".plain-link")) {
+      closeAllSubnavDropdowns();
       closeMobileMenu();
     }
   });
 }
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".subnav-dropdown")) {
+    closeAllSubnavDropdowns();
+  }
+});
 
 if (breadcrumbsList) {
   breadcrumbsList.addEventListener("click", (event) => {
@@ -1826,6 +2433,11 @@ if (breadcrumbsList) {
     }
 
     if (action === "home") {
+      if (!isHomeViewActive()) {
+        openHomePage();
+        return;
+      }
+
       state.category = "all";
       state.subcategory = "all";
       state.search = "";
@@ -1890,42 +2502,42 @@ if (homeSectionsWrap) {
       return;
     }
 
-    state.category = target.dataset.homeCategory || "all";
-    state.subcategory = resolveExistingSubcategory(state.category, target.dataset.homeSubcategory || "all");
-    state.search = "";
-    if (searchInput) {
-      searchInput.value = "";
-    }
-
-    renderSubcategoryFilters();
-    updateView();
-    closeMobileMenu();
-
-    const catalogSection = document.getElementById("catalogo");
-    if (catalogSection) {
-      catalogSection.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    const category = resolveCategoryFromUrl(target.dataset.homeCategory || "all");
+    const subcategory = resolveExistingSubcategory(category, target.dataset.homeSubcategory || "all");
+    openCatalogPage(category, subcategory);
   });
 }
-
-subcategoryFilters.addEventListener("click", (event) => {
-  const element = event.target;
-  if (!element.matches('[data-filter-type="subcategory"]')) {
-    return;
-  }
-
-  state.subcategory = element.dataset.filterValue;
-  updateView();
-});
 
 searchInput.addEventListener("input", (event) => {
   state.search = event.target.value;
   updateView();
 });
 
+searchInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") {
+    return;
+  }
+
+  event.preventDefault();
+  const query = searchInput.value || "";
+  if (!IS_CATALOG_PAGE) {
+    openCatalogPage("all", "all", query);
+    return;
+  }
+
+  state.search = query;
+  updateView();
+});
+
 if (searchActionButton) {
   searchActionButton.addEventListener("click", () => {
-    state.search = searchInput ? searchInput.value : "";
+    const query = searchInput ? searchInput.value : "";
+    if (!IS_CATALOG_PAGE) {
+      openCatalogPage("all", "all", query);
+      return;
+    }
+
+    state.search = query;
     updateView();
     if (searchInput) {
       searchInput.focus();
@@ -2040,6 +2652,14 @@ if (productModal) {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && productModal.classList.contains("open")) {
     closeModal();
+    return;
+  }
+
+  if (event.key === "Escape") {
+    closeAllSubnavDropdowns();
+    if (requirementsWidget && requirementsWidget.classList.contains("open")) {
+      closeRequirementsWidget();
+    }
   }
 });
 
@@ -2049,8 +2669,14 @@ window.addEventListener("resize", () => {
   }
 });
 
+initializeRequirementsWidget();
+
 async function initializeStore() {
   await loadProductsFromDataSources();
+  applyInitialCatalogStateFromUrl();
+  if (searchInput) {
+    searchInput.value = state.search;
+  }
   renderHeroCarousel();
   renderSubcategoryFilters();
   updateView();
