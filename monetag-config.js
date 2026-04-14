@@ -7,12 +7,16 @@
   4) Cambia `enabled` a true.
 */
 window.MONETAG_SETUP = {
-  enabled: false,
+  // Cambiar a false si quieres pausar anuncios temporalmente.
+  enabled: true,
+
+  // Muestra mensajes de diagnostico en consola (recomendado mientras configuras).
+  debug: true,
 
   // Opcion recomendada: pega aqui el HTML del tag que entrega Monetag para <head>.
-  // Ejemplo:
-  // rawHeadTagHtml: '<script async src="..."></script>',
-  rawHeadTagHtml: "",
+  // Pega el tag completo entre las comillas invertidas (backticks) para evitar errores por comillas.
+  // Tag activo de Monetag.
+  rawHeadTagHtml: `<script src="https://quge5.com/88/tag.min.js" data-zone="229526" async data-cfasync="false"></script>`,
 
   // Opcion alternativa si prefieres separar URL + atributos.
   scriptUrl: "",
@@ -29,7 +33,8 @@ window.MONETAG_SETUP = {
   verificationMetaContent: "",
 
   // Service Worker de Monetag (archivo en la raiz del sitio).
-  // Se registrara solo cuando `enabled` sea true.
-  registerServiceWorker: true,
+  // Desactivado temporalmente porque el sw.js actual no coincide con este tag.
+  // Activalo cuando subas el sw.js de la misma zona 229526.
+  registerServiceWorker: false,
   serviceWorkerPath: "/sw.js"
 };

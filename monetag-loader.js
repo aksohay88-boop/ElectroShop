@@ -1,14 +1,47 @@
 (function initializeMonetag() {
   "use strict";
 
+  const config = window.MONETAG_SETUP || {};
+  const debugEnabled = config.debug === true;
+  const status = {
+    enabled: Boolean(config.enabled),
+    headTagInjected: false,
+    scriptUrlInjected: false,
+    inlineInjected: false,
+    serviceWorkerAttempted: false,
+    serviceWorkerRegistered: false,
+    warnings: []
+  };
+
+  window.MONETAG_STATUS = status;
+
+  function logDebug(message, ...rest) {
+    if (!debugEnabled) {
+      return;
+    }
+
+    console.info("[Monetag]", message, ...rest);
+  }
+
+  function warn(message, ...rest) {
+    status.warnings.push(String(message));
+    console.warn("[Monetag]", message, ...rest);
+  }
+
   function appendScriptFromConfig(scriptUrl, scriptAttributes) {
     if (!scriptUrl) {
-      return;
+      return false;
     }
 
     const script = document.createElement("script");
     script.src = scriptUrl;
     script.async = true;
+    script.addEventListener("load", () => {
+      logDebug(`Script cargado correctamente: ${scriptUrl}`);
+    });
+    script.addEventListener("error", () => {
+      warn(`No se pudo cargar el script de Monetag: ${scriptUrl}`);
+    });
 
     if (scriptAttributes && typeof scriptAttributes === "object") {
       Object.entries(scriptAttributes).forEach(([key, value]) => {
@@ -20,16 +53,18 @@
     }
 
     document.head.appendChild(script);
+    return true;
   }
 
   function appendInlineScript(inlineScript) {
     if (!inlineScript) {
-      return;
+      return false;
     }
 
     const script = document.createElement("script");
     script.textContent = String(inlineScript);
     document.head.appendChild(script);
+    return true;
   }
 
   function appendVerificationMeta(name, content) {
@@ -77,6 +112,17 @@
         script.setAttribute(attribute.name, attribute.value);
       });
       script.textContent = node.textContent || "";
+
+      const scriptSrc = script.getAttribute("src");
+      if (scriptSrc) {
+        script.addEventListener("load", () => {
+          logDebug(`Script cargado correctamente: ${scriptSrc}`);
+        });
+        script.addEventListener("error", () => {
+          warn(`No se pudo cargar el script de Monetag: ${scriptSrc}`);
+        });
+      }
+
       document.head.appendChild(script);
     });
 
@@ -84,30 +130,58 @@
   }
 
   function registerServiceWorker(serviceWorkerPath) {
+    status.serviceWorkerAttempted = true;
+
     if (!serviceWorkerPath || typeof navigator === "undefined") {
+      warn("No se pudo registrar Service Worker: ruta no valida o navegador no compatible.");
       return;
     }
 
     if (!("serviceWorker" in navigator)) {
+      warn("Este navegador no soporta Service Worker.");
       return;
     }
 
     const isLocalhost = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
     if (!window.isSecureContext && !isLocalhost) {
+      warn("Service Worker requiere HTTPS en produccion.");
       return;
     }
 
-    navigator.serviceWorker.register(String(serviceWorkerPath)).catch((error) => {
-      console.error("No se pudo registrar el service worker de Monetag:", error);
-    });
+    navigator.serviceWorker
+      .register(String(serviceWorkerPath))
+      .then(() => {
+        status.serviceWorkerRegistered = true;
+        logDebug(`Service Worker registrado en: ${serviceWorkerPath}`);
+      })
+      .catch((error) => {
+        warn("No se pudo registrar el Service Worker de Monetag.");
+        console.error("No se pudo registrar el service worker de Monetag:", error);
+      });
   }
-
-  const config = window.MONETAG_SETUP || {};
 
   appendVerificationMeta(config.verificationMetaName, config.verificationMetaContent);
 
   if (!config.enabled) {
+    logDebug("Monetag esta desactivado en la configuracion.");
     return;
+  }
+
+  if (/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)) {
+    warn("Estas probando en localhost. Algunos formatos pueden no mostrar anuncios.");
+  }
+
+  if (navigator?.brave) {
+    warn("Brave Shield puede bloquear scripts de anuncios. Prueba en una ventana sin bloqueadores.");
+  }
+
+  const hasRawTag = String(config.rawHeadTagHtml || "").trim().length > 0;
+  const hasScriptUrl = String(config.scriptUrl || "").trim().length > 0;
+  const hasInlineScript = String(config.inlineScript || "").trim().length > 0;
+  if (!hasRawTag && !hasScriptUrl && !hasInlineScript) {
+    warn(
+      "Monetag esta activado, pero falta el Ad Tag. Pega el tag en rawHeadTagHtml o completa scriptUrl."
+    );
   }
 
   if (config.registerServiceWorker) {
@@ -115,8 +189,15 @@
   }
 
   const rawTagWasInjected = appendRawHeadTagHtml(config.rawHeadTagHtml);
+  status.headTagInjected = rawTagWasInjected;
   if (!rawTagWasInjected) {
-    appendScriptFromConfig(config.scriptUrl, config.scriptAttributes);
-    appendInlineScript(config.inlineScript);
+    status.scriptUrlInjected = appendScriptFromConfig(config.scriptUrl, config.scriptAttributes);
+    status.inlineInjected = appendInlineScript(config.inlineScript);
   }
+
+  if (!status.headTagInjected && !status.scriptUrlInjected && !status.inlineInjected) {
+    warn("No se inyecto ningun script de anuncios de Monetag.");
+  }
+
+  logDebug("Estado de Monetag:", status);
 })();
