@@ -637,6 +637,13 @@ function extractImageUrlsFromValue(value) {
   }
 
   const urls = [];
+  const candidateChunks = raw
+    .split(/[|;\n\r]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  const valuesToScan = candidateChunks.length > 0 ? candidateChunks : [raw];
+
   const imageFormulaMatch = raw.match(/=IMAGE\(\s*"([^"]+)"/i);
   if (imageFormulaMatch) {
     urls.push(imageFormulaMatch[1]);
@@ -647,8 +654,10 @@ function extractImageUrlsFromValue(value) {
     urls.push(hyperlinkFormulaMatch[1]);
   }
 
-  const directMatches = raw.match(/https?:\/\/[^\s"'<>]+/gi) || [];
-  urls.push(...directMatches);
+  valuesToScan.forEach((item) => {
+    const directMatches = item.match(/https?:\/\/[^\s"'<>|]+/gi) || [];
+    urls.push(...directMatches);
+  });
 
   return [...new Set(urls.map(normalizeImageUrl).filter((item) => item.length > 0))];
 }
