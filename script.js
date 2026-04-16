@@ -194,7 +194,7 @@ const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 const SHARED_PRODUCT_PARAM = "producto";
-const APP_BUILD_VERSION = "2026-04-15-5";
+const APP_BUILD_VERSION = "2026-04-15-6";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -1504,6 +1504,7 @@ const searchInput = document.getElementById("searchInput");
 const searchActionButton = document.getElementById("searchActionButton");
 const refreshCatalogButton = document.getElementById("refreshCatalogButton");
 const whatsappButton = document.getElementById("whatsappButton");
+const globalShareButton = document.getElementById("globalShareButton");
 const topCategoryButtons = document.querySelectorAll(".subnav [data-category]");
 const subnavDropdowns = document.querySelectorAll(".subnav-dropdown");
 const subcategoryMenus = document.querySelectorAll("[data-subcategory-menu]");
@@ -2690,6 +2691,25 @@ if (refreshCatalogButton) {
 if (whatsappButton) {
   whatsappButton.addEventListener("click", () => {
     openWhatsApp("Hola ElectroShop, quiero informacion sobre sus productos.");
+  });
+}
+
+if (globalShareButton) {
+  globalShareButton.addEventListener("click", async () => {
+    const sharePath = currentModalProduct
+      ? buildProductSharePath(currentModalProduct, state.search)
+      : window.location.href;
+
+    const shareText = currentModalProduct
+      ? `Mira este producto en ElectroShop: ${currentModalProduct.name}`
+      : "Mira el catálogo de ElectroShop.";
+
+    await shareLinkWithFallback({
+      pathOrUrl: sharePath,
+      title: currentModalProduct ? `ElectroShop | ${currentModalProduct.name}` : "ElectroShop",
+      text: shareText,
+      copyMessage: "Enlace copiado para compartir."
+    });
   });
 }
 
