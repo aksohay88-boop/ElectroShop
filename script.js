@@ -193,6 +193,11 @@ const IS_CATALOG_PAGE = PAGE_TYPE === "catalogo";
 const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
+const APP_BUILD_VERSION = "2026-04-15-4";
+
+if (typeof window !== "undefined") {
+  console.info("[ElectroShop] Build", APP_BUILD_VERSION);
+}
 
 const WHATSAPP_NUMBER = "50582108899";
 const WHATSAPP_BASE_URL = `https://wa.me/${WHATSAPP_NUMBER}`;
