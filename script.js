@@ -193,7 +193,8 @@ const IS_CATALOG_PAGE = PAGE_TYPE === "catalogo";
 const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
-const APP_BUILD_VERSION = "2026-04-15-4";
+const SHARED_PRODUCT_PARAM = "producto";
+const APP_BUILD_VERSION = "2026-04-15-5";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -399,7 +400,7 @@ const EXHIBITION_CSV_CONFIG = {
   // Formato sugerido: CATEGORIA,SKU,MODELO,NOMBRE,IMAGEN,EXHIBIDO
   // EXHIBIDO: 1/si/true para mostrar, 0/no/false para ocultar.
   path: "./data/imagenes_exhibidos.csv",
-  onlyExhibited: true
+  onlyExhibited: false
 };
 const FEATURED_RULES = [
   {
@@ -533,6 +534,75 @@ function buildCatalogUrl(category = "all", subcategory = "all", search = "") {
   return `${CATALOG_PAGE_PATH}${query ? `?${query}` : ""}`;
 }
 
+function slugifyForUrl(value) {
+  return normalizeText(value)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getProductShareToken(product) {
+  const identifierCandidate = sanitizeIdentifierValue(product?.identifier || product?.model || product?.sku || "");
+  if (identifierCandidate) {
+    return slugifyForUrl(identifierCandidate);
+  }
+
+  const nameToken = slugifyForUrl(product?.name || "");
+  const priceToken = Math.round(toFiniteNumber(product?.price, 0));
+  return `${nameToken}-${priceToken}`;
+}
+
+function buildProductSharePath(product, search = "") {
+  const params = new URLSearchParams();
+  params.set("categoria", product.category);
+  if (product.subcategory && product.subcategory !== "all") {
+    params.set("subcategoria", product.subcategory);
+  }
+
+  const cleanSearch = String(search ?? "").trim();
+  if (cleanSearch) {
+    params.set("buscar", cleanSearch);
+  }
+
+  params.set(SHARED_PRODUCT_PARAM, getProductShareToken(product));
+  return `${CATALOG_PAGE_PATH}?${params.toString()}`;
+}
+
+function buildAbsoluteUrl(pathOrUrl) {
+  if (/^https?:\/\//i.test(String(pathOrUrl || ""))) {
+    return String(pathOrUrl);
+  }
+
+  return new URL(String(pathOrUrl || ""), window.location.origin).toString();
+}
+
+async function shareLinkWithFallback({ pathOrUrl, title, text, copyMessage }) {
+  const absoluteUrl = buildAbsoluteUrl(pathOrUrl);
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text, url: absoluteUrl });
+      return true;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return false;
+      }
+    }
+  }
+
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(absoluteUrl);
+      window.alert(copyMessage || "Enlace copiado.");
+      return true;
+    } catch (error) {
+      // Ignorar y usar fallback de prompt.
+    }
+  }
+
+  window.prompt("Copia este enlace:", absoluteUrl);
+  return true;
+}
+
 function openCatalogPage(category = "all", subcategory = "all", search = "") {
   window.location.href = buildCatalogUrl(category, subcategory, search);
 }
@@ -550,10 +620,12 @@ function applyInitialCatalogStateFromUrl() {
   const category = resolveCategoryFromUrl(params.get("categoria"));
   const rawSubcategory = params.get("subcategoria");
   const rawSearch = params.get("buscar");
+  const rawSharedProductToken = params.get(SHARED_PRODUCT_PARAM);
 
   state.category = category;
   state.subcategory = resolveExistingSubcategory(category, rawSubcategory || "all");
   state.search = String(rawSearch || "").trim();
+  pendingSharedProductToken = String(rawSharedProductToken || "").trim();
 }
 
 function parseNumber(value) {
@@ -1459,6 +1531,8 @@ const modalCreditForm = document.getElementById("modalCreditForm");
 const modalCreditMonths = document.getElementById("modalCreditMonths");
 const modalCreditResult = document.getElementById("modalCreditResult");
 const modalCreditWhatsapp = document.getElementById("modalCreditWhatsapp");
+const modalShareProduct = document.getElementById("modalShareProduct");
+const modalShareSubcategory = document.getElementById("modalShareSubcategory");
 const requirementsWidget = document.getElementById("creditRequirementsWidget");
 const requirementsToggle = document.getElementById("requirementsToggle");
 
@@ -1469,6 +1543,7 @@ let heroAutoplayId = null;
 let requirementsAutoOpenId = null;
 let requirementsAutoCloseId = null;
 let requirementsHoverCloseId = null;
+let pendingSharedProductToken = "";
 
 function formatPrice(value) {
   const safeValue = toFiniteNumber(value, 0);
@@ -2151,6 +2226,36 @@ function renderModalCredit(product) {
 
 }
 
+function findProductByShareToken(rawToken) {
+  const normalizedToken = slugifyForUrl(rawToken);
+  if (!normalizedToken) {
+    return null;
+  }
+
+  return (
+    products.find((item) => {
+      const shareToken = getProductShareToken(item);
+      const identifierToken = slugifyForUrl(item.identifier || item.model || item.sku || "");
+      const nameToken = slugifyForUrl(item.name || "");
+      return [shareToken, identifierToken, nameToken].some((candidate) => candidate && candidate === normalizedToken);
+    }) || null
+  );
+}
+
+function openPendingSharedProductIfAny() {
+  if (!pendingSharedProductToken) {
+    return;
+  }
+
+  const product = findProductByShareToken(pendingSharedProductToken);
+  pendingSharedProductToken = "";
+  if (!product) {
+    return;
+  }
+
+  openProductDetails(product);
+}
+
 function openProductDetails(product) {
   currentModalProduct = product;
   modalCategory.textContent = `${formatCategoryLabel(product.category)} | ${product.subcategory}`;
@@ -2166,6 +2271,9 @@ function openProductDetails(product) {
   productModal.classList.add("open");
   productModal.setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
+  if (IS_CATALOG_PAGE) {
+    window.history.replaceState({}, "", buildProductSharePath(product, state.search));
+  }
   renderBreadcrumbs();
 }
 
@@ -2174,6 +2282,9 @@ function closeModal() {
   productModal.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
   currentModalProduct = null;
+  if (IS_CATALOG_PAGE) {
+    window.history.replaceState({}, "", buildCatalogUrl(state.category, state.subcategory, state.search));
+  }
   renderBreadcrumbs();
 }
 
@@ -2640,6 +2751,36 @@ if (modalCreditWhatsapp) {
   });
 }
 
+if (modalShareProduct) {
+  modalShareProduct.addEventListener("click", async () => {
+    if (!currentModalProduct) {
+      return;
+    }
+
+    await shareLinkWithFallback({
+      pathOrUrl: buildProductSharePath(currentModalProduct, state.search),
+      title: `ElectroShop | ${currentModalProduct.name}`,
+      text: `Mira este producto en ElectroShop: ${currentModalProduct.name}`,
+      copyMessage: "Enlace del producto copiado."
+    });
+  });
+}
+
+if (modalShareSubcategory) {
+  modalShareSubcategory.addEventListener("click", async () => {
+    if (!currentModalProduct) {
+      return;
+    }
+
+    await shareLinkWithFallback({
+      pathOrUrl: buildCatalogUrl(currentModalProduct.category, currentModalProduct.subcategory, ""),
+      title: `ElectroShop | ${currentModalProduct.subcategory}`,
+      text: `Mira esta subcategoría en ElectroShop: ${currentModalProduct.subcategory}`,
+      copyMessage: "Enlace de la subcategoría copiado."
+    });
+  });
+}
+
 if (thumbGallery) {
   thumbGallery.addEventListener("click", (event) => {
     const button = event.target.closest(".thumb-btn");
@@ -2694,6 +2835,7 @@ async function initializeStore() {
   renderHeroCarousel();
   renderSubcategoryFilters();
   updateView();
+  openPendingSharedProductIfAny();
 }
 
 initializeStore();
