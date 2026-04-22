@@ -194,7 +194,7 @@ const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 const SHARED_PRODUCT_PARAM = "producto";
-const APP_BUILD_VERSION = "2026-04-15-6";
+const APP_BUILD_VERSION = "2026-04-22-2";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -1561,6 +1561,33 @@ function openWhatsApp(message) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+function cleanupAdServiceWorkers() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((registrations) => {
+      registrations.forEach((registration) => {
+        const urls = [
+          registration?.active?.scriptURL || "",
+          registration?.waiting?.scriptURL || "",
+          registration?.installing?.scriptURL || ""
+        ].filter(Boolean);
+
+        const isAdWorker = urls.some((url) =>
+          /(monetag|3nbf4\.com|quge5\.com|service-worker\.min\.js|\/sw\.js(?:\?|$))/i.test(url)
+        );
+
+        if (isAdWorker) {
+          registration.unregister().catch(() => {});
+        }
+      });
+    })
+    .catch(() => {});
+}
+
 function formatCategoryLabel(category) {
   if (category === "Electrodomesticos") {
     return "Electrodom\u00E9sticos";
@@ -2690,7 +2717,7 @@ if (refreshCatalogButton) {
 
 if (whatsappButton) {
   whatsappButton.addEventListener("click", () => {
-    openWhatsApp("Hola ElectroShop, quiero informacion sobre sus productos.");
+    openWhatsApp("Hola ElectroShop, quiero información sobre sus productos.");
   });
 }
 
@@ -2845,6 +2872,7 @@ window.addEventListener("resize", () => {
 });
 
 initializeRequirementsWidget();
+cleanupAdServiceWorkers();
 
 async function initializeStore() {
   await loadProductsFromDataSources();

@@ -753,6 +753,55 @@ main {
   color: var(--muted);
 }
 
+.ad-strip {
+  margin-top: 1rem;
+}
+
+.ad-strip-catalog {
+  margin-bottom: 0.8rem;
+}
+
+.ad-slot {
+  min-height: 90px;
+  border-radius: 12px;
+  border: 1px dashed #cfbdf3;
+  background:
+    radial-gradient(circle at 12% 18%, #f7f1ff 0%, transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f8f4ff 100%);
+  display: grid;
+  place-items: center;
+  padding: 0.65rem;
+  overflow: hidden;
+}
+
+.ad-slot-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid #d7c8f7;
+  background: #f3ebff;
+  color: #5d4787;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  padding: 0.2rem 0.55rem;
+}
+
+.ad-slot-ready {
+  border-style: solid;
+  border-color: #c9b7ef;
+}
+
+.ad-slot-ready .ad-slot-label {
+  display: none;
+}
+
+.ad-slot-modal {
+  margin-top: 0.72rem;
+  min-height: 80px;
+}
+
 .hidden {
   display: none !important;
 }
