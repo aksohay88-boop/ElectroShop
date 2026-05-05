@@ -194,7 +194,7 @@ const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 const SHARED_PRODUCT_PARAM = "producto";
-const APP_BUILD_VERSION = "2026-04-22-2";
+const APP_BUILD_VERSION = "2026-05-05-1";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -291,42 +291,42 @@ const HOME_SECTION_LAYOUT = [
     title: "Celulares por marca",
     category: "Celulares",
     subcategories: ["Samsung", "Iphone", "Honor", "Redmi"],
-    ctaLabel: "Ver más en celulares"
+    ctaLabel: "Ver m\u00E1s en celulares"
   },
   {
     title: "Audio y accesorios",
     category: "Celulares",
-    subcategories: ["Bocinas JBL", "Auriculares", "Baterías portátiles", "Accesorios"],
+    subcategories: ["Bocinas JBL", "Auriculares", "Bater\u00EDas port\u00E1tiles", "Accesorios"],
     ctaLabel: "Explorar accesorios"
   },
   {
     title: "Consolas y gaming",
     category: "Celulares",
     subcategories: ["PlayStation", "Nintendo", "Xbox", "Gaming"],
-    ctaLabel: "Ver línea gaming"
+    ctaLabel: "Ver l\u00EDnea gaming"
   },
   {
-    title: "Cocina y preparación",
+    title: "Cocina y preparaci\u00F3n",
     category: "Electrodomesticos",
     subcategories: ["Microondas", "Cafeteras", "Freidoras", "Licuadoras"],
-    ctaLabel: "Ver electrodomésticos de cocina"
+    ctaLabel: "Ver electrodom\u00E9sticos de cocina"
   },
   {
     title: "Hogar y confort",
     category: "Electrodomesticos",
     subcategories: ["Refrigeradoras", "Lavadoras", "Camas", "Colchones"],
-    ctaLabel: "Ver línea de hogar"
+    ctaLabel: "Ver l\u00EDnea de hogar"
   },
   {
     title: "Muebles y entretenimiento",
     category: "Electrodomesticos",
     subcategories: ["Muebles", "Mesas", "Pantallas", "Equipos de Sonido"],
-    ctaLabel: "Ver más para el hogar"
+    ctaLabel: "Ver m\u00E1s para el hogar"
   }
 ];
 const HERO_SLIDE_LAYOUT = [
   {
-    label: "Electrodomésticos",
+    label: "Electrodom\u00E9sticos",
     category: "Electrodomesticos",
     subcategory: "all",
     imagePath: "./assets/hero/exhibidores.jpg",
@@ -344,7 +344,7 @@ const HERO_SLIDE_LAYOUT = [
     category: "Celulares",
     subcategory: "Laptops",
     imagePath: "./assets/hero/laptop2.jpg",
-    keywords: ["laptops", "laptop", "portátil", "portatil"],
+    keywords: ["laptops", "laptop", "port\u00E1til", "portatil"],
     strictKeywords: true
   },
   {
@@ -386,7 +386,7 @@ const HERO_SLIDE_LAYOUT = [
   }
 ];
 const GOOGLE_SHEETS_CONFIG = {
-  // Pega aquí los enlaces públicos de Google Sheets (permiso: Cualquiera con el enlace - Lector).
+  // Pega aqui los enlaces publicos de Google Sheets (permiso: Cualquiera con el enlace - Lector).
   celularesUrl: "https://docs.google.com/spreadsheets/d/14ZidwoLWp34f7ILn0wmPTvYpgYrcBOzbXV20FOjmRW4/edit?usp=sharing",
   electrodomesticosUrl: "https://docs.google.com/spreadsheets/d/1OinPkeR9C7_xHZN81SssNOg9rdKvBKIlBJutNbD9jAQ/edit?usp=sharing"
 };
@@ -808,8 +808,8 @@ function scoreDecodedCsvText(text) {
   }
 
   const replacementCount = (text.match(/\uFFFD/g) || []).length;
-  const mojibakeCount = (text.match(/Ã.|Â./g) || []).length;
-  const spanishChars = (text.match(/[ñÑáéíóúÁÉÍÓÚ]/g) || []).length;
+  const mojibakeCount = (text.match(/(?:\u00C3.|\u00C2.)/g) || []).length;
+  const spanishChars = (text.match(/[\u00F1\u00D1\u00E1\u00E9\u00ED\u00F3\u00FA\u00C1\u00C9\u00CD\u00D3\u00DA]/g) || []).length;
 
   score -= replacementCount * 5;
   score -= mojibakeCount * 2;
@@ -1071,7 +1071,7 @@ function inferFeaturesFromModel(name, identifier, category) {
       features.push(`Potencia: ${wattsMatch[1]} W`);
     }
     if (inchesMatch) {
-      features.push(`Tamaño: ${inchesMatch[1]} pulgadas`);
+      features.push(`Tama\u00F1o: ${inchesMatch[1]} pulgadas`);
     }
   }
 
@@ -1577,7 +1577,7 @@ function cleanupAdServiceWorkers() {
         ].filter(Boolean);
 
         const isAdWorker = urls.some((url) =>
-          /(monetag|3nbf4\.com|quge5\.com|service-worker\.min\.js|\/sw\.js(?:\?|$))/i.test(url)
+          /(monetag|3nbf4\.com|quge5\.com|nap5k\.com|n6wxm\.com|service-worker\.min\.js|\/sw\.js(?:\?|$))/i.test(url)
         );
 
         if (isAdWorker) {
@@ -1640,7 +1640,7 @@ function findHeroSlideProduct(config) {
 
 function buildHeroSlides() {
   const fallbackByLabel = {
-    Electrodomésticos: "https://source.unsplash.com/1600x760/?home,appliance",
+    Electrodom\u00E9sticos: "https://source.unsplash.com/1600x760/?home,appliance",
     "Hogar y descanso": "https://source.unsplash.com/1600x760/?bedroom,interior",
     Laptops: "https://source.unsplash.com/1600x760/?laptop,computer",
     "Bocinas JBL": "https://source.unsplash.com/1600x760/?speaker,audio",
@@ -1891,7 +1891,7 @@ function renderHomeSections() {
     return `
       <article class="home-card">
         <h3>${escapeHtml(section.title)}</h3>
-        <p>${totalItems} artículo(s) disponibles</p>
+        <p>${totalItems} art\u00EDculo(s) disponibles</p>
         <div class="home-tile-grid">${tilesMarkup.join("")}</div>
         <button
           class="home-link"
@@ -1933,7 +1933,7 @@ function renderSubcategoryFilters() {
         <span class="subnav-subitem-media subnav-subitem-media-all" aria-hidden="true">#</span>
         <span class="subnav-subitem-text">
           <span class="subnav-subitem-title">Ver todo en ${escapeHtml(categoryLabel)}</span>
-          <span class="subnav-subitem-meta">Mostrar todas las subcategorías</span>
+          <span class="subnav-subitem-meta">Mostrar todas las subcategor\u00EDas</span>
         </span>
       </button>
     `;
@@ -1963,7 +1963,7 @@ function renderSubcategoryFilters() {
           ${mediaMarkup}
           <span class="subnav-subitem-text">
             <span class="subnav-subitem-title">${escapeHtml(subcategory)}</span>
-            <span class="subnav-subitem-meta">${subcategoryProducts.length} artículo(s)</span>
+            <span class="subnav-subitem-meta">${subcategoryProducts.length} art\u00EDculo(s)</span>
           </span>
         </button>
       `;
@@ -2004,7 +2004,7 @@ function renderProducts() {
     if (showingFeaturedOrder) {
       productsTitle.textContent = "Productos destacados";
     } else {
-      productsTitle.textContent = homeViewActive ? "Productos destacados" : "Resultados del catálogo";
+      productsTitle.textContent = homeViewActive ? "Productos destacados" : "Resultados del cat\u00E1logo";
     }
   }
 
@@ -2075,7 +2075,7 @@ function getBreadcrumbItems() {
 
   const items = [
     { label: "Inicio", action: "home", isLink: true },
-    { label: "Catálogo", action: "catalog", isLink: true }
+    { label: "Cat\u00E1logo", action: "catalog", isLink: true }
   ];
 
   if (hasCategory) {
@@ -2098,7 +2098,7 @@ function getBreadcrumbItems() {
   }
 
   if (hasSearch) {
-    items.push({ label: `Búsqueda: "${state.search.trim()}"`, isLink: false });
+    items.push({ label: `B\u00FAsqueda: "${state.search.trim()}"`, isLink: false });
   }
 
   if (currentModalProduct) {
@@ -2707,7 +2707,7 @@ if (refreshCatalogButton) {
     try {
       await refreshCatalog();
     } catch (error) {
-      console.error("No se pudo actualizar el catálogo:", error);
+      console.error("No se pudo actualizar el cat\u00E1logo:", error);
     } finally {
       refreshCatalogButton.disabled = false;
       refreshCatalogButton.textContent = originalText;
@@ -2717,7 +2717,7 @@ if (refreshCatalogButton) {
 
 if (whatsappButton) {
   whatsappButton.addEventListener("click", () => {
-    openWhatsApp("Hola ElectroShop, quiero información sobre sus productos.");
+    openWhatsApp("Hola ElectroShop, quiero informaci\u00F3n sobre sus productos.");
   });
 }
 
@@ -2729,7 +2729,7 @@ if (globalShareButton) {
 
     const shareText = currentModalProduct
       ? `Mira este producto en ElectroShop: ${currentModalProduct.name}`
-      : "Mira el catálogo de ElectroShop.";
+      : "Mira el cat\u00E1logo de ElectroShop.";
 
     await shareLinkWithFallback({
       pathOrUrl: sharePath,
@@ -2822,8 +2822,8 @@ if (modalShareSubcategory) {
     await shareLinkWithFallback({
       pathOrUrl: buildCatalogUrl(currentModalProduct.category, currentModalProduct.subcategory, ""),
       title: `ElectroShop | ${currentModalProduct.subcategory}`,
-      text: `Mira esta subcategoría en ElectroShop: ${currentModalProduct.subcategory}`,
-      copyMessage: "Enlace de la subcategoría copiado."
+      text: `Mira esta subcategor\u00EDa en ElectroShop: ${currentModalProduct.subcategory}`,
+      copyMessage: "Enlace de la subcategor\u00EDa copiado."
     });
   });
 }
