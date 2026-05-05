@@ -194,7 +194,7 @@ const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 const SHARED_PRODUCT_PARAM = "producto";
-const APP_BUILD_VERSION = "2026-05-05-1";
+const APP_BUILD_VERSION = "2026-05-05-2";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -455,6 +455,60 @@ function normalizeText(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function getTextQualityScore(text) {
+  const value = String(text ?? "");
+  if (!value) {
+    return 0;
+  }
+
+  const replacementCount = (value.match(/\uFFFD/g) || []).length;
+  const mojibakeCount = (value.match(/(?:\u00C3.|\u00C2.)/g) || []).length;
+  const spanishChars = (value.match(/[\u00F1\u00D1\u00E1\u00E9\u00ED\u00F3\u00FA\u00C1\u00C9\u00CD\u00D3\u00DA]/g) || []).length;
+
+  return spanishChars * 2 - replacementCount * 5 - mojibakeCount * 3;
+}
+
+function repairMojibakeText(value) {
+  const input = String(value ?? "");
+  if (!input) {
+    return "";
+  }
+
+  if (!/(?:\u00C3.|\u00C2.|\uFFFD)/.test(input)) {
+    return input;
+  }
+
+  try {
+    const bytes = Uint8Array.from(input.split("").map((char) => char.charCodeAt(0) & 0xff));
+    const decoded = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    return getTextQualityScore(decoded) > getTextQualityScore(input) ? decoded : input;
+  } catch (error) {
+    return input;
+  }
+}
+
+function repairDocumentTextNodes(root = document.body) {
+  if (!root || typeof document === "undefined") {
+    return;
+  }
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const blockedTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA"]);
+
+  let currentNode = walker.nextNode();
+  while (currentNode) {
+    const parentTag = currentNode.parentElement?.tagName || "";
+    if (!blockedTags.has(parentTag)) {
+      const original = currentNode.nodeValue || "";
+      const repaired = repairMojibakeText(original);
+      if (repaired !== original) {
+        currentNode.nodeValue = repaired;
+      }
+    }
+    currentNode = walker.nextNode();
+  }
 }
 
 function toFiniteNumber(value, fallback = 0) {
@@ -840,7 +894,7 @@ function csvToObjects(csvText) {
     .map((values) => {
       const objectRow = {};
       headers.forEach((header, index) => {
-        objectRow[header] = String(values[index] ?? "").trim();
+        objectRow[header] = repairMojibakeText(String(values[index] ?? "").trim());
       });
       return objectRow;
     });
@@ -849,7 +903,7 @@ function csvToObjects(csvText) {
 function findFieldValue(row, aliases) {
   for (const alias of aliases) {
     if (row[alias]) {
-      return row[alias];
+      return repairMojibakeText(row[alias]);
     }
   }
 
@@ -860,7 +914,7 @@ function findFieldValue(row, aliases) {
 
     for (const alias of aliases) {
       if (key.includes(alias)) {
-        return value;
+        return repairMojibakeText(value);
       }
     }
   }
@@ -2875,6 +2929,7 @@ initializeRequirementsWidget();
 cleanupAdServiceWorkers();
 
 async function initializeStore() {
+  repairDocumentTextNodes();
   await loadProductsFromDataSources();
   applyInitialCatalogStateFromUrl();
   if (searchInput) {
