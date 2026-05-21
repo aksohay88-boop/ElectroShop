@@ -194,7 +194,7 @@ const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 const SHARED_PRODUCT_PARAM = "producto";
-const APP_BUILD_VERSION = "2026-05-20-2";
+const APP_BUILD_VERSION = "2026-05-20-3";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -2259,7 +2259,7 @@ function renderProducts() {
         ? `<span class="featured-badge">${escapeHtml(featuredBadge)}</span>`
         : "";
       const imageMarkup = primaryImage
-        ? `<img src="${escapeAttribute(primaryImage)}" alt="${productName}" loading="lazy" />`
+        ? `<img src="${escapeAttribute(primaryImage)}" alt="${productName}" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" />`
         : escapeHtml(item.icon);
 
       return `
@@ -2420,6 +2420,8 @@ async function refreshCatalog() {
 function setModalImage(imageUrl, activeIndex) {
   const fallbackImage = "https://picsum.photos/seed/product-fallback/900/900";
   const safeImageUrl = imageUrl || fallbackImage;
+  mainProductImage.referrerPolicy = "no-referrer";
+  mainProductImage.crossOrigin = "anonymous";
   mainProductImage.onerror = () => {
     mainProductImage.onerror = null;
     mainProductImage.src = fallbackImage;
@@ -2435,7 +2437,7 @@ function renderModalGallery(images) {
     .map(
       (imageUrl, index) =>
         `<button class="thumb-btn ${index === 0 ? "active" : ""}" type="button" data-image-index="${index}" data-image-url="${escapeAttribute(imageUrl)}">
-          <img src="${escapeAttribute(imageUrl)}" alt="Vista ${index + 1} del producto" loading="lazy" />
+          <img src="${escapeAttribute(imageUrl)}" alt="Vista ${index + 1} del producto" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" />
         </button>`
     )
     .join("");
