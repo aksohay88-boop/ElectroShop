@@ -194,7 +194,7 @@ const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 const SHARED_PRODUCT_PARAM = "producto";
-const APP_BUILD_VERSION = "2026-05-05-2";
+const APP_BUILD_VERSION = "2026-05-20-1";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -733,6 +733,77 @@ function parseNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function hasProductPrice(value) {
+  if (value === null || value === undefined || value === "") {
+    return false;
+  }
+
+  const numericValue = toFiniteNumber(value, 0);
+  return Number.isFinite(numericValue) && numericValue > 0;
+}
+
+function formatPriceOrFallback(value, fallback = "Precio a consultar") {
+  return hasProductPrice(value) ? formatPrice(value) : fallback;
+}
+
+function shouldKeepProductByPrice(item) {
+  const priceAvailable = hasProductPrice(item?.price);
+  const numericPrice = toFiniteNumber(item?.price, 0);
+  if (item?.category === "Celulares") {
+    return priceAvailable && numericPrice >= MIN_VISIBLE_PRICE;
+  }
+
+  if (!priceAvailable) {
+    return true;
+  }
+
+  return numericPrice >= MIN_VISIBLE_PRICE;
+}
+
+function inferSubcategoryFromProductText(category, text) {
+  const allowed = getAllowedSubcategories(category);
+  const normalizedText = normalizeCategoryKey(text);
+  if (!normalizedText) {
+    return "";
+  }
+
+  let bestMatch = "";
+  let bestScore = 0;
+  allowed.forEach((subcategory) => {
+    const normalizedSubcategory = normalizeCategoryKey(subcategory);
+    if (!normalizedSubcategory) {
+      return;
+    }
+
+    if (
+      normalizedText.includes(normalizedSubcategory) ||
+      normalizedSubcategory.includes(normalizedText) ||
+      normalizeText(text).includes(normalizeText(subcategory))
+    ) {
+      const score = normalizedSubcategory.length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = subcategory;
+      }
+    }
+  });
+
+  return bestMatch;
+}
+
+function resolveSubcategoryForRow(category, rawSubcategory, name, model, sku) {
+  if (String(rawSubcategory || "").trim()) {
+    return resolveSubcategory(category, rawSubcategory);
+  }
+
+  const inferred = inferSubcategoryFromProductText(category, `${name} ${model} ${sku}`.trim());
+  if (inferred) {
+    return inferred;
+  }
+
+  return resolveSubcategory(category, rawSubcategory);
+}
+
 function normalizeImageUrl(rawUrl) {
   const value = String(rawUrl ?? "").trim().replace(/^['"]|['"]$/g, "").replace(/[);,.\s]+$/g, "");
   if (!value) {
@@ -851,6 +922,40 @@ function parseCsv(text) {
   return rows.filter((item) => item.some((value) => String(value).trim() !== ""));
 }
 
+function normalizeCsvRow(values, expectedColumns) {
+  if (!Array.isArray(values) || expectedColumns <= 1) {
+    return values;
+  }
+
+  if (values.length === expectedColumns) {
+    return values;
+  }
+
+  if (values.length !== 1) {
+    return values;
+  }
+
+  const collapsedValue = String(values[0] ?? "").trim();
+  if (!collapsedValue || !collapsedValue.includes(",")) {
+    return values;
+  }
+
+  const nestedRowsFromRaw = parseCsv(collapsedValue);
+  if (nestedRowsFromRaw.length > 0 && nestedRowsFromRaw[0].length === expectedColumns) {
+    return nestedRowsFromRaw[0];
+  }
+
+  if (collapsedValue.startsWith("\"") && collapsedValue.endsWith("\"")) {
+    const unwrapped = collapsedValue.slice(1, -1).replace(/""/g, "\"");
+    const nestedRowsFromUnwrapped = parseCsv(unwrapped);
+    if (nestedRowsFromUnwrapped.length > 0 && nestedRowsFromUnwrapped[0].length === expectedColumns) {
+      return nestedRowsFromUnwrapped[0];
+    }
+  }
+
+  return values;
+}
+
 function scoreDecodedCsvText(text) {
   let score = 0;
   if (!text) {
@@ -890,6 +995,7 @@ function csvToObjects(csvText) {
   const headers = rows[0].map((header) => normalizeText(header).replace(/[^a-z0-9]+/g, "_"));
   return rows
     .slice(1)
+    .map((values) => normalizeCsvRow(values, headers.length))
     .filter((values) => values.some((value) => String(value).trim() !== ""))
     .map((values) => {
       const objectRow = {};
@@ -1350,9 +1456,14 @@ function mapSheetRowsToProducts(rows, category) {
     const { sku, model, identifier } = getProductIdentifiers(row);
     const priceValue = findFieldValue(row, ["precio", "contado", "pvp", "valor", "price"]);
     const parsedPrice = parseNumber(priceValue);
-    const safePrice = toFiniteNumber(parsedPrice, 0);
+    const hasParsedPrice = parsedPrice !== null && parsedPrice > 0;
+    const safePrice = hasParsedPrice ? Math.max(0, parsedPrice) : null;
 
-    if (safePrice < MIN_VISIBLE_PRICE) {
+    if (category === "Celulares" && (!hasParsedPrice || safePrice < MIN_VISIBLE_PRICE)) {
+      return;
+    }
+
+    if (category !== "Celulares" && hasParsedPrice && safePrice < MIN_VISIBLE_PRICE) {
       return;
     }
 
@@ -1365,7 +1476,7 @@ function mapSheetRowsToProducts(rows, category) {
       "tipo",
       "marca"
     ]);
-    const subcategory = resolveSubcategory(category, rawSubcategory);
+    const subcategory = resolveSubcategoryForRow(category, rawSubcategory, name, model, sku);
 
     if (!isAvailableByStock(row, category, subcategory, name)) {
       return;
@@ -1546,7 +1657,7 @@ async function loadProductsFromDataSources() {
     mergedProducts.push(...DEFAULT_PRODUCTS.filter((item) => item.category === category));
   });
 
-  const priceFilteredProducts = mergedProducts.filter((item) => toFiniteNumber(item.price, 0) >= MIN_VISIBLE_PRICE);
+  const priceFilteredProducts = mergedProducts.filter((item) => shouldKeepProductByPrice(item));
   const exhibitionFilteredProducts = applyExhibitionEntries(priceFilteredProducts, exhibitionEntries);
   products = exhibitionFilteredProducts.map((item, index) => ({ ...item, id: index + 1 }));
 }
@@ -1799,10 +1910,17 @@ function renderHeroCarousel() {
 
 function buildInterestMessage(product) {
   const productName = String(product?.name ?? "").trim();
-  return `Hola ElectroShop, me interesa este producto: ${productName} (${formatPrice(product?.price)}).`;
+  if (hasProductPrice(product?.price)) {
+    return `Hola ElectroShop, me interesa este producto: ${productName} (${formatPrice(product?.price)}).`;
+  }
+  return `Hola ElectroShop, me interesa este producto: ${productName}.`;
 }
 
 function buildCreditMessage(product, months) {
+  if (!hasProductPrice(product?.price)) {
+    return `Hola ElectroShop, quiero aplicar a crédito para ${product?.name || "este producto"}. ¿Me comparten precio y plan disponible?`;
+  }
+
   const plan = calculateCreditPlan(product, months);
   const productName = String(product?.name ?? "").trim();
   return (
@@ -2083,6 +2201,8 @@ function renderProducts() {
       const categoryLabel = escapeHtml(formatCategoryLabel(item.category));
       const subcategoryLabel = escapeHtml(item.subcategory);
       const productName = escapeHtml(item.name);
+      const priceLabel = escapeHtml(formatPriceOrFallback(item.price));
+      const priceClass = hasProductPrice(item.price) ? "price" : "price price-unavailable";
       const featuredBadge = getFeaturedBadge(item);
       const featuredBadgeMarkup = featuredBadge
         ? `<span class="featured-badge">${escapeHtml(featuredBadge)}</span>`
@@ -2098,7 +2218,7 @@ function renderProducts() {
           ${featuredBadgeMarkup}
           <span class="meta">${categoryLabel} | ${subcategoryLabel}</span>
             <h3 class="title">${productName}</h3>
-            <span class="price">${formatPrice(item.price)}</span>
+            <span class="${priceClass}">${priceLabel}</span>
             <div class="card-actions">
               <button class="buy-btn" data-product-id="${item.id}" type="button">
                 <span class="btn-icon" aria-hidden="true">
@@ -2280,6 +2400,31 @@ function renderModalGallery(images) {
 }
 
 function renderModalCredit(product) {
+  const hasPrice = hasProductPrice(product?.price);
+  if (!hasPrice) {
+    if (modalCreditForm) {
+      modalCreditForm.classList.add("hidden");
+    }
+    if (modalCreditWhatsapp) {
+      modalCreditWhatsapp.classList.add("hidden");
+    }
+    modalCreditResult.innerHTML = `
+      <article class="result-item result-item-info">
+        <h4>Financiamiento</h4>
+        <strong>Precio a consultar</strong>
+        <p>Escríbenos por WhatsApp para cotizar este artículo y simular su crédito.</p>
+      </article>
+    `;
+    return;
+  }
+
+  if (modalCreditForm) {
+    modalCreditForm.classList.remove("hidden");
+  }
+  if (modalCreditWhatsapp) {
+    modalCreditWhatsapp.classList.remove("hidden");
+  }
+
   const months = Number(modalCreditMonths.value);
   const plan = calculateCreditPlan(product, months);
 
@@ -2343,7 +2488,8 @@ function openProductDetails(product) {
   modalCategory.textContent = `${formatCategoryLabel(product.category)} | ${product.subcategory}`;
   modalTitle.textContent = product.name;
   modalDescription.textContent = product.description;
-  modalCashPrice.textContent = formatPrice(product.price);
+  modalCashPrice.textContent = formatPriceOrFallback(product.price);
+  modalCashPrice.classList.toggle("price-unavailable", !hasProductPrice(product.price));
   modalSpecs.innerHTML = product.specs.map((spec) => `<li>${escapeHtml(spec)}</li>`).join("");
 
   modalCreditMonths.value = "12";
