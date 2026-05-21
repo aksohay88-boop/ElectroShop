@@ -194,7 +194,7 @@ const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 const SHARED_PRODUCT_PARAM = "producto";
-const APP_BUILD_VERSION = "2026-05-20-3";
+const APP_BUILD_VERSION = "2026-05-20-4";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -392,14 +392,17 @@ const GOOGLE_SHEETS_CONFIG = {
 };
 const LOCAL_CSV_CONFIG = {
   // CSV locales dentro del proyecto (si existen, tienen prioridad sobre Google Sheets).
-  celularesPath: "./data/celulares.csv",
-  electrodomesticosPath: "./data/electrodomesticos.csv"
+  // Se intentan ambas rutas para evitar errores al subir por GitHub web.
+  celularesPaths: ["./data/celulares.csv", "./celulares.csv"],
+  electrodomesticosPaths: ["./data/electrodomesticos.csv", "./electrodomesticos.csv"]
 };
 const EXHIBITION_CSV_CONFIG = {
   // Mapa manual de imagenes por SKU/modelo/nombre.
   // Formato sugerido: CATEGORIA,SKU,MODELO,NOMBRE,IMAGEN,EXHIBIDO
   // EXHIBIDO: 1/si/true para mostrar, 0/no/false para ocultar.
-  path: "./data/imagenes_exhibidos.csv",
+  // Si no deseas sobrescribir imagenes desde este archivo, deja enabled en false.
+  enabled: false,
+  paths: ["./data/imagenes_exhibidos.csv", "./imagenes_exhibidos.csv"],
   onlyExhibited: false
 };
 const FEATURED_RULES = [
@@ -1387,27 +1390,51 @@ function parseExhibitionEntry(row) {
   };
 }
 
+function normalizeCandidatePaths(pathsOrSingle) {
+  const rawList = Array.isArray(pathsOrSingle) ? pathsOrSingle : [pathsOrSingle];
+  return [...new Set(rawList.map((value) => String(value || "").trim()).filter((value) => value.length > 0))];
+}
+
 async function collectExhibitionEntriesFromLocalCsv() {
-  const csvPath = String(EXHIBITION_CSV_CONFIG.path || "").trim();
-  if (!csvPath) {
+  if (!EXHIBITION_CSV_CONFIG.enabled) {
     return [];
   }
 
-  try {
-    const response = await fetch(csvPath, { cache: "no-store" });
-    if (!response.ok) {
-      return [];
+  const candidatePaths = normalizeCandidatePaths(EXHIBITION_CSV_CONFIG.paths);
+  if (candidatePaths.length === 0) {
+    return [];
+  }
+
+  const candidates = [];
+
+  for (const csvPath of candidatePaths) {
+    try {
+      const response = await fetch(csvPath, { cache: "no-store" });
+      if (!response.ok) {
+        continue;
+      }
+
+      const csvText = decodeCsvBuffer(await response.arrayBuffer());
+      const rows = csvToObjects(csvText);
+      const entries = rows.map((row) => parseExhibitionEntry(row)).filter((entry) => entry !== null);
+      if (entries.length > 0) {
+        candidates.push({ csvPath, entries });
+      }
+    } catch (error) {
+      console.error("Error leyendo CSV de imagenes exhibidas:", error);
     }
+  }
 
-    const csvText = decodeCsvBuffer(await response.arrayBuffer());
-    const rows = csvToObjects(csvText);
-    return rows
-      .map((row) => parseExhibitionEntry(row))
-      .filter((entry) => entry !== null);
-  } catch (error) {
-    console.error("Error leyendo CSV de imagenes exhibidas:", error);
+  if (candidates.length === 0) {
     return [];
   }
+
+  candidates.sort((left, right) => right.entries.length - left.entries.length);
+  const selected = candidates[0];
+  console.info("[ElectroShop] CSV de imagenes exhibidas seleccionado:", selected.csvPath, {
+    filas: selected.entries.length
+  });
+  return selected.entries;
 }
 
 function scoreExhibitionMatch(product, entry) {
@@ -1615,19 +1642,57 @@ async function fetchProductsFromSheet(source) {
 }
 
 async function fetchProductsFromLocalCsv(source) {
-  const csvPath = String(source.path || "").trim();
-  if (!csvPath) {
+  const candidatePaths = normalizeCandidatePaths(source.paths || source.path);
+  if (candidatePaths.length === 0) {
     return [];
   }
 
-  const response = await fetch(csvPath, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`No se pudo leer CSV local (${response.status})`);
+  const scoredCandidates = [];
+  for (const csvPath of candidatePaths) {
+    try {
+      const response = await fetch(csvPath, { cache: "no-store" });
+      if (!response.ok) {
+        continue;
+      }
+
+      const csvText = decodeCsvBuffer(await response.arrayBuffer());
+      const rows = csvToObjects(csvText);
+      const productsFromCsv = mapSheetRowsToProducts(rows, source.category);
+      if (productsFromCsv.length === 0) {
+        continue;
+      }
+
+      const customImagesCount = productsFromCsv.filter(
+        (item) =>
+          Array.isArray(item.images) &&
+          item.images.length > 0 &&
+          !String(item.images[0] || "").includes("picsum.photos/seed/")
+      ).length;
+      const score = productsFromCsv.length * 1000 + customImagesCount;
+
+      scoredCandidates.push({
+        csvPath,
+        productsFromCsv,
+        score,
+        rowsCount: productsFromCsv.length,
+        customImagesCount
+      });
+    } catch (error) {
+      console.error(`Error leyendo CSV local (${source.category}) en ${csvPath}:`, error);
+    }
   }
 
-  const csvText = decodeCsvBuffer(await response.arrayBuffer());
-  const rows = csvToObjects(csvText);
-  return mapSheetRowsToProducts(rows, source.category);
+  if (scoredCandidates.length === 0) {
+    throw new Error("No se encontro un CSV local valido para esta categoria.");
+  }
+
+  scoredCandidates.sort((left, right) => right.score - left.score);
+  const selected = scoredCandidates[0];
+  console.info(`[ElectroShop] CSV local seleccionado para ${source.category}:`, selected.csvPath, {
+    filas: selected.rowsCount,
+    conImagenPersonalizada: selected.customImagesCount
+  });
+  return selected.productsFromCsv;
 }
 
 async function collectProductsFromGoogleSheets(categoriesToLoad = ["Celulares", "Electrodomesticos"]) {
@@ -1656,10 +1721,10 @@ async function collectProductsFromGoogleSheets(categoriesToLoad = ["Celulares", 
 
 async function collectProductsFromLocalCsv() {
   const sources = [
-    { category: "Celulares", path: LOCAL_CSV_CONFIG.celularesPath },
-    { category: "Electrodomesticos", path: LOCAL_CSV_CONFIG.electrodomesticosPath }
+    { category: "Celulares", paths: LOCAL_CSV_CONFIG.celularesPaths },
+    { category: "Electrodomesticos", paths: LOCAL_CSV_CONFIG.electrodomesticosPaths }
   ];
-  const configuredSources = sources.filter((source) => String(source.path).trim() !== "");
+  const configuredSources = sources.filter((source) => normalizeCandidatePaths(source.paths).length > 0);
 
   const importedByCategory = new Map();
   for (const source of configuredSources) {
