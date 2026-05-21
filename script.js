@@ -194,7 +194,7 @@ const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 const SHARED_PRODUCT_PARAM = "producto";
-const APP_BUILD_VERSION = "2026-05-20-1";
+const APP_BUILD_VERSION = "2026-05-20-2";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -877,7 +877,31 @@ function looksLikeImageUrl(url) {
   );
 }
 
-function parseCsv(text) {
+function detectCsvDelimiter(text) {
+  const firstLine = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  if (!firstLine) {
+    return ",";
+  }
+
+  const delimiters = [",", ";", "\t"];
+  let selectedDelimiter = ",";
+  let bestCount = -1;
+
+  delimiters.forEach((delimiter) => {
+    const count = firstLine.split(delimiter).length - 1;
+    if (count > bestCount) {
+      bestCount = count;
+      selectedDelimiter = delimiter;
+    }
+  });
+
+  return selectedDelimiter;
+}
+
+function parseCsvWithDelimiter(text, delimiter) {
   const rows = [];
   let row = [];
   let cell = "";
@@ -897,7 +921,7 @@ function parseCsv(text) {
       continue;
     }
 
-    if (char === "," && !inQuotes) {
+    if (char === delimiter && !inQuotes) {
       row.push(cell);
       cell = "";
       continue;
@@ -922,6 +946,11 @@ function parseCsv(text) {
   return rows.filter((item) => item.some((value) => String(value).trim() !== ""));
 }
 
+function parseCsv(text) {
+  const delimiter = detectCsvDelimiter(text);
+  return parseCsvWithDelimiter(text, delimiter);
+}
+
 function normalizeCsvRow(values, expectedColumns) {
   if (!Array.isArray(values) || expectedColumns <= 1) {
     return values;
@@ -940,16 +969,30 @@ function normalizeCsvRow(values, expectedColumns) {
     return values;
   }
 
-  const nestedRowsFromRaw = parseCsv(collapsedValue);
-  if (nestedRowsFromRaw.length > 0 && nestedRowsFromRaw[0].length === expectedColumns) {
-    return nestedRowsFromRaw[0];
+  const parseAttempts = [
+    parseCsv(collapsedValue),
+    parseCsvWithDelimiter(collapsedValue, ","),
+    parseCsvWithDelimiter(collapsedValue, ";"),
+    parseCsvWithDelimiter(collapsedValue, "\t")
+  ];
+  for (const attempt of parseAttempts) {
+    if (attempt.length > 0 && attempt[0].length === expectedColumns) {
+      return attempt[0];
+    }
   }
 
   if (collapsedValue.startsWith("\"") && collapsedValue.endsWith("\"")) {
     const unwrapped = collapsedValue.slice(1, -1).replace(/""/g, "\"");
-    const nestedRowsFromUnwrapped = parseCsv(unwrapped);
-    if (nestedRowsFromUnwrapped.length > 0 && nestedRowsFromUnwrapped[0].length === expectedColumns) {
-      return nestedRowsFromUnwrapped[0];
+    const unwrappedAttempts = [
+      parseCsv(unwrapped),
+      parseCsvWithDelimiter(unwrapped, ","),
+      parseCsvWithDelimiter(unwrapped, ";"),
+      parseCsvWithDelimiter(unwrapped, "\t")
+    ];
+    for (const attempt of unwrappedAttempts) {
+      if (attempt.length > 0 && attempt[0].length === expectedColumns) {
+        return attempt[0];
+      }
     }
   }
 
@@ -1660,6 +1703,14 @@ async function loadProductsFromDataSources() {
   const priceFilteredProducts = mergedProducts.filter((item) => shouldKeepProductByPrice(item));
   const exhibitionFilteredProducts = applyExhibitionEntries(priceFilteredProducts, exhibitionEntries);
   products = exhibitionFilteredProducts.map((item, index) => ({ ...item, id: index + 1 }));
+
+  const productsWithCustomImage = products.filter(
+    (item) => Array.isArray(item.images) && item.images[0] && !String(item.images[0]).includes("picsum.photos/seed/")
+  ).length;
+  console.info("[ElectroShop] Catalogo cargado", {
+    total: products.length,
+    conImagenPersonalizada: productsWithCustomImage
+  });
 }
 
 const productGrid = document.getElementById("productGrid");
