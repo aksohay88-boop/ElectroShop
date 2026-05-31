@@ -872,6 +872,11 @@ function extractImageUrlsFromValue(value) {
   }
 
   valuesToScan.forEach((item) => {
+    const localImagePath = normalizeImageUrl(item);
+    if (localImagePath) {
+      urls.push(localImagePath);
+    }
+
     const directMatches = item.match(/https?:\/\/[^\s"'<>|]+/gi) || [];
     urls.push(...directMatches);
   });

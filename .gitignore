@@ -1,0 +1,12 @@
+node_modules/
+node_modules/.vite/
+.vite/
+.cache/
+*.log
+*.tmp
+*.temp
+*.bak
+*.old
+SUBIR_A_GITHUB/
+SUBIR_A_GITHUB.zip
+recovery-codesvercel.txt
