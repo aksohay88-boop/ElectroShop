@@ -1,4 +1,4 @@
-NOMBRE,PRECIO,DISPONIBILIDAD,IMAGEN,SUBCATEGORIA,SKU
+﻿NOMBRE,PRECIO,DISPONIBILIDAD,IMAGEN,SUBCATEGORIA,SKU
 "Alexa Echo Dot,""C$2,450"",1,./assets/productos/alexa-echo-dot-1-22b4cca1.webp|./assets/productos/alexa-echo-dot-2-ae8be910.webp|./assets/productos/alexa-echo-dot-3-7093cd25.webp,ALEXAS,"
 "Alexa Echo Pop,""C$1,850"",1,./assets/productos/alexa-echo-pop-1-233e6fae.webp|./assets/productos/alexa-echo-pop-2-13f71d48.webp|./assets/productos/alexa-echo-pop-3-1e229146.webp,ALEXAS,"
 "Alexa Echo Show,""C$2,950"",1,./assets/productos/alexa-echo-show-1-e2ea659b.webp|./assets/productos/alexa-echo-show-2-ddf1e4be.webp|./assets/productos/alexa-echo-show-3-5d8dfa87.webp,ALEXAS,"
@@ -194,4 +194,4 @@ Teclado Bluetooth Plegable,C$990,3,,TECLADO,
 "Tecno Spark Go 2024 64GB 2RAM,""C$3,330"",0,,TECNO,"
 Termos Yeti,C$700,3,,ACCESORIOS,
 "Xbox Series S 512GB,""C$18,870"",1,,XBOX,"
-"Xbox Series S 1TB,""C$24,290"",1,,XBOX,"Xbox Series S 1TB,"C$24,290",1,,XBOX,
+"Xbox Series S 1TB,""C$24,290"",1,,XBOX,"
