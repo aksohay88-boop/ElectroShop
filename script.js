@@ -194,7 +194,7 @@ const CATALOG_PAGE_PATH = "./catalogo.html";
 const HOME_PAGE_PATH = "./index.html";
 const REQUIREMENTS_HOME_SESSION_KEY = "electroshop_requirements_home_autoshown";
 const SHARED_PRODUCT_PARAM = "producto";
-const APP_BUILD_VERSION = "2026-05-20-4";
+const APP_BUILD_VERSION = "2026-05-25-2";
 
 if (typeof window !== "undefined") {
   console.info("[ElectroShop] Build", APP_BUILD_VERSION);
@@ -828,8 +828,20 @@ function normalizeImageUrl(rawUrl) {
     return `https://drive.google.com/uc?export=view&id=${ucMatch[1]}`;
   }
 
+  if (/^https?:\/\/lh3\.googleusercontent\.com\/pw\//i.test(value)) {
+    if (/[\?&]authuser=/i.test(value)) {
+      return value;
+    }
+    return `${value}${value.includes("?") ? "&" : "?"}authuser=0`;
+  }
+
   if (/^https?:\/\//i.test(value)) {
     return value;
+  }
+
+  // Permitir rutas locales para imagenes optimizadas del proyecto.
+  if (/^(?:\.{1,2}\/|\/|assets\/)/i.test(value)) {
+    return value.startsWith("./") || value.startsWith("/") ? value : `./${value}`;
   }
 
   return "";
@@ -2324,7 +2336,7 @@ function renderProducts() {
         ? `<span class="featured-badge">${escapeHtml(featuredBadge)}</span>`
         : "";
       const imageMarkup = primaryImage
-        ? `<img src="${escapeAttribute(primaryImage)}" alt="${productName}" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" />`
+        ? `<img src="${escapeAttribute(primaryImage)}" alt="${productName}" loading="lazy" />`
         : escapeHtml(item.icon);
 
       return `
@@ -2502,7 +2514,7 @@ function renderModalGallery(images) {
     .map(
       (imageUrl, index) =>
         `<button class="thumb-btn ${index === 0 ? "active" : ""}" type="button" data-image-index="${index}" data-image-url="${escapeAttribute(imageUrl)}">
-          <img src="${escapeAttribute(imageUrl)}" alt="Vista ${index + 1} del producto" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" />
+          <img src="${escapeAttribute(imageUrl)}" alt="Vista ${index + 1} del producto" loading="lazy" />
         </button>`
     )
     .join("");
